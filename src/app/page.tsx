@@ -2,13 +2,15 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { LatLng, TransportReport, SafetyReport, RouteState } from "@/lib/types";
 import { initialTransportReports, initialSafetyReports } from "@/lib/mockData";
 import { useGeolocation } from "@/lib/useGeolocation";
+import { fetchWeather, getWeatherAlert, WeatherData, WeatherAlert } from "@/lib/weather";
 import Navbar from "@/components/Navbar";
 import RoutePanel from "@/components/RoutePanel";
 import ReportPanel from "@/components/ReportPanel";
+import WeatherBar from "@/components/WeatherBar";
 import ChatBot from "@/components/ChatBot";
 
 const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
@@ -31,10 +33,52 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [showSafety, setShowSafety] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
   const [selectedReport, setSelectedReport] = useState<TransportReport | SafetyReport | null>(null);
   const [mobileView, setMobileView] = useState<"map" | "panel">("map");
   const [route, setRoute] = useState<RouteState>(INITIAL_ROUTE);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+
+  // Weather state
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherAlert, setWeatherAlert] = useState<WeatherAlert | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+
+  // Fetch weather on position change (debounced)
+  useEffect(() => {
+    let cancelled = false;
+    setWeatherLoading(true);
+
+    const timer = setTimeout(async () => {
+      const data = await fetchWeather(position);
+      if (cancelled) return;
+      setWeather(data);
+      setWeatherAlert(data ? getWeatherAlert(data) : null);
+      setWeatherLoading(false);
+
+      // Auto-show radar if it's raining
+      if (data && data.precipitation > 0) {
+        setShowRadar(true);
+      }
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [position.lat, position.lng]);
+
+  // Refresh weather every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const data = await fetchWeather(position);
+      if (data) {
+        setWeather(data);
+        setWeatherAlert(getWeatherAlert(data));
+      }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [position.lat, position.lng]);
 
   const handleRouteChange = useCallback((partial: Partial<RouteState>) => {
     setRoute((prev) => ({ ...prev, ...partial }));
@@ -68,6 +112,10 @@ export default function Home() {
         {/* Sidebar */}
         <div className={`${mobileView === "panel" ? "flex" : "hidden"} md:flex flex-col w-full md:w-[400px] lg:w-[420px] h-full bg-gray-50 border-r border-gray-200 overflow-hidden z-10`}>
           <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-4 pb-24 md:pb-4">
+            {/* Weather */}
+            <WeatherBar weather={weather} alert={weatherAlert} loading={weatherLoading} />
+
+            {/* Route planner */}
             <RoutePanel
               route={route}
               onRouteChange={handleRouteChange}
@@ -77,6 +125,7 @@ export default function Home() {
               apiLoaded={!!API_KEY}
             />
 
+            {/* Map layer toggles */}
             <div className="flex gap-2">
               <button
                 onClick={() => setShowTraffic(!showTraffic)}
@@ -84,6 +133,13 @@ export default function Home() {
               >
                 <span className="material-symbols-outlined text-[14px]">traffic</span>
                 Traffico
+              </button>
+              <button
+                onClick={() => setShowRadar(!showRadar)}
+                className={`chip flex-1 justify-center ${showRadar ? "bg-blue-100 text-blue-700 ring-1 ring-blue-300" : "bg-white text-gray-600 border border-gray-200"}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">rainy</span>
+                Radar
               </button>
               <button
                 onClick={() => setShowSafety(!showSafety)}
@@ -94,6 +150,7 @@ export default function Home() {
               </button>
             </div>
 
+            {/* Reports */}
             <ReportPanel
               reports={transportReports}
               onAddReport={handleAddReport}
@@ -115,10 +172,29 @@ export default function Home() {
             onDirectionsResult={handleDirectionsResult}
             showTraffic={showTraffic}
             showSafetyLayer={showSafety}
+            showRadar={showRadar}
             selectedReport={selectedReport}
             onSelectReport={setSelectedReport}
           />
 
+          {/* Map overlay: weather alert banner */}
+          {weatherAlert && weatherAlert.severity !== "info" && (
+            <div className="absolute top-4 left-4 right-16 z-10 animate-fade-in-up">
+              <div className={`rounded-2xl px-4 py-3 shadow-lg flex items-center gap-3 ${
+                weatherAlert.severity === "danger"
+                  ? "bg-red-500 text-white"
+                  : "bg-amber-400 text-amber-900"
+              }`}>
+                <span className="material-symbols-outlined text-[22px]">{weatherAlert.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">{weatherAlert.title}</p>
+                  <p className="text-xs opacity-90">{weatherAlert.suggestion}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Map controls */}
           <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
             <button
               onClick={recenter}
@@ -126,8 +202,17 @@ export default function Home() {
             >
               <span className="material-symbols-outlined text-blue-600 text-[22px]">my_location</span>
             </button>
+            <button
+              onClick={() => setShowRadar(!showRadar)}
+              className={`shadow-lg rounded-2xl w-12 h-12 flex items-center justify-center transition ${
+                showRadar ? "bg-blue-600 text-white" : "glass hover:bg-white"
+              }`}
+            >
+              <span className={`material-symbols-outlined text-[22px] ${showRadar ? "" : "text-blue-600"}`}>rainy</span>
+            </button>
           </div>
 
+          {/* Floating AI button */}
           <button
             onClick={() => setChatOpen(true)}
             className="absolute bottom-24 md:bottom-6 right-4 z-10 bg-blue-600 text-white shadow-xl rounded-2xl px-5 py-3 flex items-center gap-2 hover:bg-blue-700 transition hover:shadow-2xl"
@@ -136,6 +221,7 @@ export default function Home() {
             <span className="text-sm font-semibold hidden sm:inline">Assistente AI</span>
           </button>
 
+          {/* Mobile SOS */}
           <div className="md:hidden absolute bottom-24 left-4 right-20 z-10">
             <button
               onClick={() => setChatOpen(true)}
@@ -179,6 +265,7 @@ export default function Home() {
         userPosition={position}
         transportReports={transportReports}
         safetyReports={safetyReports}
+        weather={weather}
       />
     </div>
   );

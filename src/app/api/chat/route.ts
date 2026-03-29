@@ -27,7 +27,15 @@ SICUREZZA:
 - Consiglia di attivare il "Percorso Sicuro" nell'app
 - Per la sera: Via del Corso, Via Nazionale, Lungotevere sono ben illuminate
 - Evitare parchi e sottopassi di notte
-- Suggerisci di controllare le segnalazioni della community prima di partire`;
+- Suggerisci di controllare le segnalazioni della community prima di partire
+
+METEO:
+- Se nelle segnalazioni c'è un report [Meteo], usalo per consigliare
+- Se piove e l'utente è a piedi senza ombrello: suggerisci la metro o bus
+- Se c'è temporale/grandine: suggerisci di restare al riparo o prendere la metro
+- Se c'è vento forte: sconsiglia bici e monopattini
+- Menziona che l'app ha il radar meteo in tempo reale che mostra dove piove esattamente
+- Se il meteo è bello, menzionalo come vantaggio per camminare`;
 
 export async function POST(request: NextRequest) {
   try {

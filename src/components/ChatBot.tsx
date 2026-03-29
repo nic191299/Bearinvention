@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { ChatMessage, LatLng, TransportReport, SafetyReport } from "@/lib/types";
+import { WeatherData, getWeatherInfo } from "@/lib/weather";
 
 interface ChatBotProps {
   isOpen: boolean;
@@ -9,9 +10,10 @@ interface ChatBotProps {
   userPosition: LatLng;
   transportReports: TransportReport[];
   safetyReports: SafetyReport[];
+  weather?: WeatherData | null;
 }
 
-export default function ChatBot({ isOpen, onClose, userPosition, transportReports, safetyReports }: ChatBotProps) {
+export default function ChatBot({ isOpen, onClose, userPosition, transportReports, safetyReports, weather }: ChatBotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -44,6 +46,9 @@ export default function ChatBot({ isOpen, onClose, userPosition, transportReport
           nearbyReports: [
             ...transportReports.slice(0, 4).map((r) => ({ message: `[Trasporto] ${r.message}` })),
             ...safetyReports.slice(0, 3).map((r) => ({ message: `[Sicurezza] ${r.message}` })),
+            ...(weather ? [{
+              message: `[Meteo] ${getWeatherInfo(weather.weatherCode).label}, ${Math.round(weather.temperature)}°C, precipitazioni: ${weather.precipitation}mm, vento: ${Math.round(weather.windSpeed)}km/h, raffiche: ${Math.round(weather.windGusts)}km/h`
+            }] : []),
           ],
         }),
       });

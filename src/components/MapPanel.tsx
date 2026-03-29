@@ -10,6 +10,7 @@ import {
   InfoWindow,
 } from "@react-google-maps/api";
 import { LatLng, TransportReport, SafetyReport, TRANSPORT_TYPES, SAFETY_TYPES, RouteState } from "@/lib/types";
+import { RadarFrame, fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
 
 const libraries: ("places")[] = ["places"];
 
@@ -30,6 +31,7 @@ interface MapPanelProps {
   onDirectionsResult: (result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => void;
   showTraffic: boolean;
   showSafetyLayer: boolean;
+  showRadar: boolean;
   selectedReport: TransportReport | SafetyReport | null;
   onSelectReport: (r: TransportReport | SafetyReport | null) => void;
 }
@@ -44,11 +46,13 @@ export default function MapPanel({
   onDirectionsResult,
   showTraffic,
   showSafetyLayer,
+  showRadar,
   selectedReport,
   onSelectReport,
 }: MapPanelProps) {
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries });
   const mapRef = useRef<google.maps.Map | null>(null);
+  const radarOverlayRef = useRef<google.maps.ImageMapType | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
 
   const onLoad = useCallback((map: google.maps.Map) => {
@@ -96,6 +100,44 @@ export default function MapPanel({
       mapRef.current.panTo(userPosition);
     }
   }, []);
+
+  // Radar overlay
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+
+    // Remove existing radar layer
+    if (radarOverlayRef.current) {
+      map.overlayMapTypes.clear();
+      radarOverlayRef.current = null;
+    }
+
+    if (!showRadar) return;
+
+    // Fetch latest radar frame and add as tile overlay
+    fetchRadarFrames().then((frames) => {
+      if (!frames || !map) return;
+      const allFrames = [...frames.past, ...frames.nowcast];
+      const latestFrame = allFrames[allFrames.length - 1];
+      if (!latestFrame) return;
+
+      const tileUrl = getRadarTileUrl(latestFrame, 256);
+      const radarLayer = new google.maps.ImageMapType({
+        getTileUrl: (coord, zoom) => {
+          return tileUrl
+            .replace("{z}", String(zoom))
+            .replace("{x}", String(coord.x))
+            .replace("{y}", String(coord.y));
+        },
+        tileSize: new google.maps.Size(256, 256),
+        opacity: 0.6,
+        name: "RainViewer",
+      });
+
+      map.overlayMapTypes.push(radarLayer);
+      radarOverlayRef.current = radarLayer;
+    });
+  }, [isLoaded, showRadar]);
 
   if (!isLoaded) {
     return (
