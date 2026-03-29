@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useCallback, useEffect } from "react";
-import { LatLng, Report } from "@/lib/types";
+import { LatLng, Report, NewsAlert } from "@/lib/types";
 import { initialReports } from "@/lib/mockData";
 import { useGeolocation } from "@/lib/useGeolocation";
 import { fetchWeather, getWeatherAlert, WeatherData, WeatherAlert } from "@/lib/weather";
@@ -32,6 +32,9 @@ export default function Home() {
   const [routeActive, setRouteActive] = useState(false);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+
+  // News
+  const [newsAlerts, setNewsAlerts] = useState<NewsAlert[]>([]);
 
   // Weather
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -85,6 +88,7 @@ export default function Home() {
         apiKey={API_KEY}
         userPosition={position}
         reports={reports}
+        newsAlerts={newsAlerts}
         showRadar={showRadar}
         showTraffic={showTraffic}
         directions={directions}
@@ -112,7 +116,7 @@ export default function Home() {
           apiLoaded={!!API_KEY}
         />
         <WeatherBar weather={weather} alert={weatherAlert} />
-        <NewsAlerts />
+        <NewsAlerts onAlerts={setNewsAlerts} />
       </div>
 
       {/* === LEFT: 3 Report icons === */}
@@ -151,9 +155,9 @@ export default function Home() {
 
       {/* === BRANDING === */}
       <div className="absolute top-3 left-3 z-10 glass rounded-xl shadow-lg px-3 py-2 flex items-center gap-2">
-        <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">U</div>
+        <img src="/logo.svg" alt="R-Home" className="w-7 h-7" />
         <div className="hidden sm:block">
-          <div className="text-xs font-bold text-gray-800 leading-none">UrbanMove</div>
+          <div className="text-xs font-bold text-gray-800 leading-none">R-Home</div>
           <div className="text-[9px] text-gray-400">Roma</div>
         </div>
       </div>

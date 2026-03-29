@@ -11,7 +11,11 @@ const CATEGORY_CONFIG = {
   general: { icon: "newspaper", color: "#6b7280", label: "Notizia" },
 };
 
-export default function NewsAlerts() {
+interface NewsAlertsProps {
+  onAlerts?: (alerts: NewsAlert[]) => void;
+}
+
+export default function NewsAlerts({ onAlerts }: NewsAlertsProps) {
   const [alerts, setAlerts] = useState<NewsAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -20,7 +24,9 @@ export default function NewsAlerts() {
     fetch("/api/news")
       .then((r) => r.json())
       .then((data) => {
-        setAlerts(data.alerts || []);
+        const a = data.alerts || [];
+        setAlerts(a);
+        onAlerts?.(a);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -29,9 +35,14 @@ export default function NewsAlerts() {
     const interval = setInterval(() => {
       fetch("/api/news")
         .then((r) => r.json())
-        .then((data) => setAlerts(data.alerts || []));
+        .then((data) => {
+          const a = data.alerts || [];
+          setAlerts(a);
+          onAlerts?.(a);
+        });
     }, 10 * 60 * 1000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {

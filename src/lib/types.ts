@@ -26,7 +26,7 @@ export interface ChatMessage {
 }
 
 export const REPORT_CONFIG = {
-  road_closed: { label: "Strada chiusa", icon: "block", color: "#ef4444" },
-  danger: { label: "Pericolo", icon: "warning", color: "#f59e0b" },
-  slowdown: { label: "Rallentamento", icon: "speed", color: "#f97316" },
+  road_closed: { label: "Strada chiusa", icon: "block", color: "#f97316" },
+  danger: { label: "Pericolo", icon: "warning", color: "#ef4444" },
+  slowdown: { label: "Rallentamento", icon: "speed", color: "#eab308" },
 } as const;

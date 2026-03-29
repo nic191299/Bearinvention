@@ -1,4 +1,4 @@
-# UrbanMove Roma — Presentazione
+# R-Home — Presentazione
 
 ## Il problema
 "Come possiamo aiutare un giovane in trasferta a decidere cosa fare quando il mezzo che sta aspettando non arriva, senza restare bloccato alla fermata?"
@@ -9,7 +9,7 @@ A Roma, chi si muove a piedi o con i mezzi pubblici non ha un unico punto dove t
 - Le condizioni meteo zona per zona
 - Le notizie su scioperi ed eventi che impattano la mobilita
 
-## La soluzione: UrbanMove
+## La soluzione: R-Home
 Un'app web che combina dati in tempo reale, segnalazioni della community e intelligenza artificiale per aiutare pedoni e utenti dei mezzi pubblici a muoversi per Roma.
 
 ## Come funziona
@@ -21,9 +21,9 @@ Un'app web che combina dati in tempo reale, segnalazioni della community e intel
 
 ### 2. Segnalazioni community (stile Waze)
 Tre bottoni sempre visibili sulla mappa:
-- **Strada chiusa** — segnala un blocco sul percorso
-- **Pericolo** — segnala una situazione pericolosa
-- **Rallentamento** — segnala code o ritardi
+- **Strada chiusa** (arancione) — segnala un blocco sul percorso
+- **Pericolo** (rosso) — segnala una situazione pericolosa
+- **Rallentamento** (giallo) — segnala code o ritardi
 Un tap dalla propria posizione GPS. Nessuna registrazione, nessun form.
 Le segnalazioni appaiono sulla mappa solo quando sono rilevanti: zoomando sulla zona o se cadono lungo il percorso pianificato.
 
@@ -33,16 +33,17 @@ Le segnalazioni appaiono sulla mappa solo quando sono rilevanti: zoomando sulla 
 - Clicca una zona: vedi se piove li o no
 - Alert automatici: se piove e sei a piedi, l'app suggerisce la metro
 
-### 4. Notizie Roma Live
+### 4. Roma Live — Notizie e marker su mappa
 Scraping automatico da Google News e RomaToday per:
 - **Scioperi** ATAC, Cotral, Trenitalia
 - **Strade chiuse** per lavori, cantieri, incidenti
 - **Eventi** che impattano la mobilita (manifestazioni, cortei, maratone)
 - **Problemi trasporti** (metro interrotta, bus deviati, guasti)
 Aggiornamento ogni 10 minuti.
+Le notizie su chiusure stradali, pericoli e rallentamenti generano automaticamente marker sulla mappa, visibili lungo il percorso o zoomando.
 
 ### 5. Assistente AI
-Chatbot integrato che:
+Chatbot integrato (R-Home AI) che:
 - Conosce la rete di trasporti di Roma
 - Ha accesso ai dati meteo in tempo reale
 - Suggerisce alternative quando il mezzo non arriva

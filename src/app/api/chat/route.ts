@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
-const SYSTEM_PROMPT = `Sei UrbanMove AI, un assistente per la mobilità urbana e sicurezza a Roma.
+const SYSTEM_PROMPT = `Sei R-Home AI, un assistente per la mobilità urbana e sicurezza a Roma.
 Aiuti persone (specialmente giovani in trasferta) quando il trasporto non funziona o hanno dubbi sulla sicurezza.
 
 CONTESTO: Fai parte di un'app con segnalazioni crowdsourced (trasporti + sicurezza), mappa Google Maps con traffico live, e routing intelligente.

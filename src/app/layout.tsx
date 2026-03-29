@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "UrbanMove Roma — Pedoni e Mezzi",
+  title: "R-Home — Roma Pedoni e Mezzi",
   description: "Naviga Roma a piedi e con i mezzi. Segnalazioni live, meteo radar, notizie trasporti, AI assistant.",
 };
 

@@ -61,7 +61,7 @@ export default function ChatBot({ isOpen, onClose, userPosition, weather }: Chat
               <span className="material-symbols-outlined text-[18px]">smart_toy</span>
             </div>
             <div>
-              <h3 className="font-semibold text-sm">UrbanMove AI</h3>
+              <h3 className="font-semibold text-sm">R-Home AI</h3>
               <p className="text-[10px] text-gray-400">Roma - Pedoni e Mezzi</p>
             </div>
           </div>

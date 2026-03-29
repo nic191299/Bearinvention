@@ -9,9 +9,9 @@ interface ReportIconsProps {
 }
 
 const ITEMS: { type: "road_closed" | "danger" | "slowdown"; icon: string; label: string; color: string }[] = [
-  { type: "road_closed", icon: "block", label: "Strada chiusa", color: "#ef4444" },
-  { type: "danger", icon: "warning", label: "Pericolo", color: "#f59e0b" },
-  { type: "slowdown", icon: "speed", label: "Rallentamento", color: "#f97316" },
+  { type: "road_closed", icon: "block", label: "Strada chiusa", color: "#f97316" },
+  { type: "danger", icon: "warning", label: "Pericolo", color: "#ef4444" },
+  { type: "slowdown", icon: "speed", label: "Rallentamento", color: "#eab308" },
 ];
 
 export default function ReportIcons({ onReport }: ReportIconsProps) {

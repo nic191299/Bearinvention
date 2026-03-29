@@ -10,7 +10,7 @@ import {
   InfoWindow,
   Circle,
 } from "@react-google-maps/api";
-import { LatLng, Report, REPORT_CONFIG } from "@/lib/types";
+import { LatLng, Report, NewsAlert, REPORT_CONFIG } from "@/lib/types";
 import { fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
 import { WeatherZonePoint, fetchWeatherZones } from "@/lib/weatherZones";
 
@@ -43,10 +43,37 @@ function isNearRoute(point: LatLng, result: google.maps.DirectionsResult | null,
   return false;
 }
 
+// Posizioni note di Roma per piazzare i marker delle news
+const ROME_POSITIONS: LatLng[] = [
+  { lat: 41.8986, lng: 12.4769 },  // Largo Argentina
+  { lat: 41.9028, lng: 12.4964 },  // Piazza Venezia
+  { lat: 41.8902, lng: 12.4922 },  // Colosseo
+  { lat: 41.9009, lng: 12.4833 },  // Trastevere
+  { lat: 41.9106, lng: 12.5017 },  // Termini
+  { lat: 41.9100, lng: 12.4768 },  // Piazza del Popolo
+  { lat: 41.9022, lng: 12.4539 },  // Stazione Trastevere
+  { lat: 41.9010, lng: 12.5024 },  // San Giovanni
+  { lat: 41.9073, lng: 12.5175 },  // Tiburtina
+  { lat: 41.8578, lng: 12.5194 },  // EUR
+  { lat: 41.8827, lng: 12.4707 },  // Ostiense
+  { lat: 41.9186, lng: 12.4614 },  // Prati / Vaticano
+  { lat: 41.8674, lng: 12.4711 },  // Garbatella
+  { lat: 41.9242, lng: 12.4952 },  // Parioli
+  { lat: 41.8719, lng: 12.5674 },  // Cinecittà
+];
+
+const NEWS_MARKER_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
+  road_closure: { icon: "block", color: "#f97316", label: "Chiusura strada" },
+  strike: { icon: "front_hand", color: "#ef4444", label: "Sciopero" },
+  event: { icon: "event", color: "#eab308", label: "Evento" },
+  transport: { icon: "directions_bus", color: "#ef4444", label: "Problema trasporti" },
+};
+
 interface MapPanelProps {
   apiKey: string;
   userPosition: LatLng;
   reports: Report[];
+  newsAlerts: NewsAlert[];
   showRadar: boolean;
   showTraffic: boolean;
   directions: google.maps.DirectionsResult | null;
@@ -61,6 +88,7 @@ export default function MapPanel({
   apiKey,
   userPosition,
   reports,
+  newsAlerts,
   showRadar,
   showTraffic,
   directions,
@@ -77,6 +105,7 @@ export default function MapPanel({
   const [weatherZones, setWeatherZones] = useState<WeatherZonePoint[]>([]);
   const [selectedWz, setSelectedWz] = useState<WeatherZonePoint | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [selectedNews, setSelectedNews] = useState<(NewsAlert & { position: LatLng }) | null>(null);
   const [zoom, setZoom] = useState(14);
 
   const onLoad = useCallback((map: google.maps.Map) => {
@@ -160,6 +189,15 @@ export default function MapPanel({
   const showReports = zoom >= 15;
   const visibleReports = reports.filter((r) => showReports || isNearRoute(r.position, localDirections));
 
+  // News markers: only road_closure, strike, event, transport
+  const newsMarkers = newsAlerts
+    .filter((a) => a.category !== "general")
+    .map((a, i) => ({
+      ...a,
+      position: ROME_POSITIONS[i % ROME_POSITIONS.length],
+    }))
+    .filter((a) => showReports || isNearRoute(a.position, localDirections));
+
   if (!isLoaded) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
@@ -174,7 +212,7 @@ export default function MapPanel({
       center={userPosition}
       zoom={14}
       onLoad={onLoad}
-      onClick={() => { setSelectedReport(null); setSelectedWz(null); }}
+      onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); }}
       options={{
         styles: MAP_STYLES,
         disableDefaultUI: true,
@@ -244,6 +282,47 @@ export default function MapPanel({
               <span style={{ fontSize: 10, color: "#94a3b8" }}>{Math.round((Date.now() - selectedReport.timestamp.getTime()) / 60000)} min fa</span>
             </div>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Confermato da {selectedReport.upvotes} utenti</div>
+          </div>
+        </InfoWindow>
+      )}
+
+      {/* News markers */}
+      {newsMarkers.map((n) => {
+        const cfg = NEWS_MARKER_CONFIG[n.category];
+        if (!cfg) return null;
+        return (
+          <Marker
+            key={`news-${n.id}`}
+            position={n.position}
+            onClick={() => { setSelectedNews(n); setSelectedReport(null); setSelectedWz(null); }}
+            icon={{
+              path: "M-12,-12 L12,-12 L12,12 L-12,12 Z",
+              scale: 1,
+              fillColor: cfg.color,
+              fillOpacity: 0.9,
+              strokeColor: "#fff",
+              strokeWeight: 2,
+              anchor: new google.maps.Point(0, 0),
+            }}
+            zIndex={45}
+          />
+        );
+      })}
+      {selectedNews && NEWS_MARKER_CONFIG[selectedNews.category] && (
+        <InfoWindow position={selectedNews.position} onCloseClick={() => setSelectedNews(null)}>
+          <div style={{ padding: 6, maxWidth: 240 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, color: "#fff", backgroundColor: NEWS_MARKER_CONFIG[selectedNews.category].color }}>
+                {NEWS_MARKER_CONFIG[selectedNews.category].label}
+              </span>
+            </div>
+            <p style={{ fontSize: 12, fontWeight: 600, margin: "4px 0", lineHeight: 1.4 }}>{selectedNews.title}</p>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>{selectedNews.source} &middot; {selectedNews.date}</div>
+            {selectedNews.url && (
+              <a href={selectedNews.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#2563eb", fontWeight: 600, marginTop: 4, display: "inline-block" }}>
+                Leggi notizia &rarr;
+              </a>
+            )}
           </div>
         </InfoWindow>
       )}
