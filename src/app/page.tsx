@@ -1,174 +1,184 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState, useCallback } from "react";
-import { BusStop, CommunityReport } from "@/lib/types";
-import { busStops, initialReports } from "@/lib/mockData";
-import Sidebar from "@/components/Sidebar";
+import { LatLng, TransportReport, SafetyReport, RouteState } from "@/lib/types";
+import { initialTransportReports, initialSafetyReports } from "@/lib/mockData";
+import { useGeolocation } from "@/lib/useGeolocation";
+import Navbar from "@/components/Navbar";
+import RoutePanel from "@/components/RoutePanel";
+import ReportPanel from "@/components/ReportPanel";
 import ChatBot from "@/components/ChatBot";
 
-const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 
-// Default: near Termini station
-const DEFAULT_POSITION = { lat: 41.9009, lng: 12.5016 };
+const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+const INITIAL_ROUTE: RouteState = {
+  origin: null,
+  destination: null,
+  originText: "",
+  destinationText: "",
+  mode: "TRANSIT" as unknown as google.maps.TravelMode,
+  active: false,
+};
 
 export default function Home() {
-  const [userPosition, setUserPosition] = useState(DEFAULT_POSITION);
-  const [reports, setReports] = useState<CommunityReport[]>(initialReports);
-  const [selectedStop, setSelectedStop] = useState<BusStop | null>(null);
+  const { position, recenter } = useGeolocation();
+  const [transportReports, setTransportReports] = useState<TransportReport[]>(initialTransportReports);
+  const [safetyReports] = useState<SafetyReport[]>(initialSafetyReports);
   const [chatOpen, setChatOpen] = useState(false);
-  const [showBikes, setShowBikes] = useState(false);
-  const [walkingRoute, setWalkingRoute] = useState<[number, number][] | null>(null);
+  const [showTraffic, setShowTraffic] = useState(false);
+  const [showSafety, setShowSafety] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<TransportReport | SafetyReport | null>(null);
+  const [mobileView, setMobileView] = useState<"map" | "panel">("map");
+  const [route, setRoute] = useState<RouteState>(INITIAL_ROUTE);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
-  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null);
-  const [mobileShowMap, setMobileShowMap] = useState(true);
 
-  const handleSelectStop = useCallback((stop: BusStop) => {
-    setSelectedStop(stop);
-    setFlyTo({ lat: stop.lat, lng: stop.lng });
-    setWalkingRoute(null);
+  const handleRouteChange = useCallback((partial: Partial<RouteState>) => {
+    setRoute((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  const handleClearRoute = useCallback(() => {
+    setRoute(INITIAL_ROUTE);
     setRouteInfo(null);
   }, []);
 
-  const handleAddReport = useCallback(
-    (report: Omit<CommunityReport, "id" | "timestamp" | "upvotes">) => {
-      const newReport: CommunityReport = {
-        ...report,
-        id: `r${Date.now()}`,
-        timestamp: new Date(),
-        upvotes: 0,
-      };
-      setReports((prev) => [newReport, ...prev]);
-    },
-    []
-  );
-
-  const handleUpvote = useCallback((id: string) => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + 1 } : r))
-    );
+  const handleDirectionsResult = useCallback((_result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => {
+    setRouteInfo(info);
   }, []);
 
-  const handleFindRoute = useCallback(async () => {
-    if (!selectedStop) return;
+  const handleAddReport = useCallback((report: Omit<TransportReport, "id" | "timestamp" | "upvotes">) => {
+    setTransportReports((prev) => [
+      { ...report, id: `tr${Date.now()}`, timestamp: new Date(), upvotes: 0 },
+      ...prev,
+    ]);
+  }, []);
 
-    try {
-      const url = `https://router.project-osrm.org/route/v1/foot/${userPosition.lng},${userPosition.lat};${selectedStop.lng},${selectedStop.lat}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        const coords: [number, number][] = route.geometry.coordinates.map(
-          (c: [number, number]) => [c[1], c[0]] as [number, number]
-        );
-        setWalkingRoute(coords);
-
-        const distKm = (route.distance / 1000).toFixed(1);
-        const durMin = Math.round(route.duration / 60);
-        setRouteInfo({ distance: `${distKm} km`, duration: `${durMin} min` });
-      }
-    } catch (err) {
-      console.error("Routing error:", err);
-    }
-  }, [selectedStop, userPosition]);
-
-  // Try to get real GPS
-  const handleLocateMe = useCallback(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setUserPosition(newPos);
-          setFlyTo(newPos);
-        },
-        () => {
-          // Keep default position on error
-        }
-      );
-    }
+  const handleUpvote = useCallback((id: string) => {
+    setTransportReports((prev) => prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + 1 } : r)));
   }, []);
 
   return (
-    <div className="h-screen w-screen flex flex-col lg:flex-row overflow-hidden bg-gray-100">
-      {/* Mobile toggle */}
-      <div className="lg:hidden flex border-b border-gray-200 bg-white shrink-0">
-        <button
-          onClick={() => setMobileShowMap(true)}
-          className={`flex-1 py-2.5 text-sm font-medium transition ${
-            mobileShowMap ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"
-          }`}
-        >
-          🗺️ Mappa
-        </button>
-        <button
-          onClick={() => setMobileShowMap(false)}
-          className={`flex-1 py-2.5 text-sm font-medium transition ${
-            !mobileShowMap ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"
-          }`}
-        >
-          📋 Community
-        </button>
-      </div>
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
+      <Navbar />
 
-      {/* Sidebar - hidden on mobile when map is shown */}
-      <div className={`${mobileShowMap ? "hidden lg:flex" : "flex"} flex-col h-full`}>
-        <Sidebar
-          reports={reports}
-          selectedStop={selectedStop}
-          onAddReport={handleAddReport}
-          onUpvote={handleUpvote}
-          onOpenChat={() => setChatOpen(true)}
-          onToggleBikes={() => setShowBikes(!showBikes)}
-          showBikes={showBikes}
-          onFindRoute={handleFindRoute}
-          walkingRoute={walkingRoute}
-          routeInfo={routeInfo}
-          userPosition={userPosition}
-        />
-      </div>
+      <div className="flex-1 flex flex-col md:flex-row md:pt-14 overflow-hidden">
+        {/* Sidebar */}
+        <div className={`${mobileView === "panel" ? "flex" : "hidden"} md:flex flex-col w-full md:w-[400px] lg:w-[420px] h-full bg-gray-50 border-r border-gray-200 overflow-hidden z-10`}>
+          <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-4 pb-24 md:pb-4">
+            <RoutePanel
+              route={route}
+              onRouteChange={handleRouteChange}
+              userPosition={position}
+              routeInfo={routeInfo}
+              onClear={handleClearRoute}
+              apiLoaded={!!API_KEY}
+            />
 
-      {/* Map */}
-      <div className={`flex-1 relative ${!mobileShowMap ? "hidden lg:block" : ""}`}>
-        <MapView
-          busStops={busStops}
-          reports={reports}
-          userPosition={userPosition}
-          selectedStop={selectedStop}
-          onSelectStop={handleSelectStop}
-          walkingRoute={walkingRoute}
-          showBikes={showBikes}
-          flyTo={flyTo}
-        />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowTraffic(!showTraffic)}
+                className={`chip flex-1 justify-center ${showTraffic ? "bg-orange-100 text-orange-700 ring-1 ring-orange-300" : "bg-white text-gray-600 border border-gray-200"}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">traffic</span>
+                Traffico
+              </button>
+              <button
+                onClick={() => setShowSafety(!showSafety)}
+                className={`chip flex-1 justify-center ${showSafety ? "bg-red-100 text-red-700 ring-1 ring-red-300" : "bg-white text-gray-600 border border-gray-200"}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">shield</span>
+                Sicurezza
+              </button>
+            </div>
 
-        {/* Map overlay buttons */}
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-[1000]">
-          <button
-            onClick={handleLocateMe}
-            className="bg-white shadow-lg rounded-xl px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-            title="Trova la mia posizione"
-          >
-            📍 Localizzami
-          </button>
+            <ReportPanel
+              reports={transportReports}
+              onAddReport={handleAddReport}
+              onUpvote={handleUpvote}
+              userPosition={position}
+            />
+          </div>
         </div>
 
-        {/* Floating SOS button on mobile */}
-        <div className="lg:hidden absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000]">
+        {/* Map */}
+        <div className={`flex-1 relative ${mobileView === "panel" ? "hidden md:block" : ""}`}>
+          <MapPanel
+            apiKey={API_KEY}
+            userPosition={position}
+            transportReports={transportReports}
+            safetyReports={safetyReports}
+            route={route}
+            onMapClick={() => {}}
+            onDirectionsResult={handleDirectionsResult}
+            showTraffic={showTraffic}
+            showSafetyLayer={showSafety}
+            selectedReport={selectedReport}
+            onSelectReport={setSelectedReport}
+          />
+
+          <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+            <button
+              onClick={recenter}
+              className="glass shadow-lg rounded-2xl w-12 h-12 flex items-center justify-center hover:bg-white transition"
+            >
+              <span className="material-symbols-outlined text-blue-600 text-[22px]">my_location</span>
+            </button>
+          </div>
+
           <button
             onClick={() => setChatOpen(true)}
-            className="bg-blue-600 text-white shadow-xl rounded-full px-6 py-3 text-sm font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+            className="absolute bottom-24 md:bottom-6 right-4 z-10 bg-blue-600 text-white shadow-xl rounded-2xl px-5 py-3 flex items-center gap-2 hover:bg-blue-700 transition hover:shadow-2xl"
           >
-            🤖 Sono bloccato, aiutami!
+            <span className="material-symbols-outlined text-[20px]">smart_toy</span>
+            <span className="text-sm font-semibold hidden sm:inline">Assistente AI</span>
           </button>
+
+          <div className="md:hidden absolute bottom-24 left-4 right-20 z-10">
+            <button
+              onClick={() => setChatOpen(true)}
+              className="w-full bg-red-500 text-white shadow-xl rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-red-600 transition"
+            >
+              <span className="material-symbols-outlined text-[18px]">warning</span>
+              Sono bloccato, aiutami!
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile bottom nav */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-gray-200 flex">
+          <button
+            onClick={() => setMobileView("map")}
+            className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-medium ${mobileView === "map" ? "text-blue-600" : "text-gray-400"}`}
+          >
+            <span className="material-symbols-outlined text-[20px]">map</span>
+            Mappa
+          </button>
+          <button
+            onClick={() => setMobileView("panel")}
+            className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-medium ${mobileView === "panel" ? "text-blue-600" : "text-gray-400"}`}
+          >
+            <span className="material-symbols-outlined text-[20px]">feed</span>
+            Segnalazioni
+          </button>
+          <Link
+            href="/safety"
+            className="flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-medium text-gray-400"
+          >
+            <span className="material-symbols-outlined text-[20px]">shield</span>
+            Sicurezza
+          </Link>
         </div>
       </div>
 
-      {/* Chat overlay */}
       <ChatBot
         isOpen={chatOpen}
         onClose={() => setChatOpen(false)}
-        userPosition={userPosition}
-        nearbyReports={reports}
+        userPosition={position}
+        transportReports={transportReports}
+        safetyReports={safetyReports}
       />
     </div>
   );
