@@ -16,6 +16,7 @@ interface RoutePanelProps {
   onUseMyLocation: () => void;
   onClear: () => void;
   apiLoaded: boolean;
+  safetyCount?: number;
 }
 
 export default function RoutePanel({
@@ -29,6 +30,7 @@ export default function RoutePanel({
   onUseMyLocation,
   onClear,
   apiLoaded,
+  safetyCount = 0,
 }: RoutePanelProps) {
   const destRef = useRef<HTMLInputElement>(null);
   const originInputRef = useRef<HTMLInputElement>(null);
@@ -131,18 +133,28 @@ export default function RoutePanel({
 
       {/* Route result */}
       {routeInfo && (
-        <div className="px-3 pb-3 flex items-center justify-between border-t border-gray-100 pt-2">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
-              <span className="material-symbols-outlined text-blue-600 text-[16px]">schedule</span>
-              {routeInfo.duration}
-            </span>
-            <span className="text-xs text-gray-400">{routeInfo.distance}</span>
+        <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
+                <span className="material-symbols-outlined text-blue-600 text-[16px]">schedule</span>
+                {routeInfo.duration}
+              </span>
+              <span className="text-xs text-gray-400">{routeInfo.distance}</span>
+            </div>
+            <button onClick={onClear} className="text-[11px] text-red-500 font-medium flex items-center gap-0.5">
+              <span className="material-symbols-outlined text-[12px]">close</span>
+              Annulla
+            </button>
           </div>
-          <button onClick={onClear} className="text-[11px] text-red-500 font-medium flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-[12px]">close</span>
-            Annulla
-          </button>
+          {safetyCount > 0 && (
+            <div className="flex items-center gap-2 px-2.5 py-2 bg-red-50 rounded-xl border border-red-100">
+              <span className="material-symbols-outlined text-red-500 text-[16px]">shield</span>
+              <span className="text-[11px] text-red-700 font-medium">
+                {safetyCount} segnalazion{safetyCount === 1 ? "e" : "i"} sicurezza nella zona — attiva lo scudo sulla mappa
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

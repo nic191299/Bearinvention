@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { NewsAlert } from "@/lib/types";
 
-const CATEGORY_CONFIG = {
+const CATEGORY_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
   strike: { icon: "front_hand", color: "#7c3aed", label: "Sciopero" },
   road_closure: { icon: "block", color: "#ef4444", label: "Chiusura" },
   event: { icon: "event", color: "#2563eb", label: "Evento" },
   transport: { icon: "directions_bus", color: "#f59e0b", label: "Trasporti" },
+  crime: { icon: "local_police", color: "#dc2626", label: "Sicurezza" },
   general: { icon: "newspaper", color: "#6b7280", label: "Notizia" },
 };
 

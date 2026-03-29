@@ -6,10 +6,12 @@ const STRIKE_KEYWORDS = ["sciopero", "scioperi", "agitazione", "astensione"];
 const ROAD_KEYWORDS = ["strada chiusa", "chiusura", "deviazione", "deviazioni", "lavori", "cantiere", "interdetta", "transennata"];
 const EVENT_KEYWORDS = ["manifestazione", "corteo", "evento", "maratona", "processione", "partita", "concerto", "adunata"];
 const TRANSPORT_KEYWORDS = ["atac", "metro", "metropolitana", "tram", "bus", "cotral", "trenitalia", "linea", "ritardo", "sospesa", "interrotta", "guasto"];
+const CRIME_KEYWORDS = ["furto", "furti", "rapina", "rapine", "scippo", "borseggio", "aggressione", "accoltellamento", "rissa", "molestie", "violenza", "spaccio", "arresto", "arrestat", "derubat", "rubato"];
 
 function categorize(text: string): NewsAlert["category"] {
   const lower = text.toLowerCase();
   if (STRIKE_KEYWORDS.some((k) => lower.includes(k))) return "strike";
+  if (CRIME_KEYWORDS.some((k) => lower.includes(k))) return "crime";
   if (ROAD_KEYWORDS.some((k) => lower.includes(k))) return "road_closure";
   if (EVENT_KEYWORDS.some((k) => lower.includes(k))) return "event";
   if (TRANSPORT_KEYWORDS.some((k) => lower.includes(k))) return "transport";
@@ -30,8 +32,8 @@ function parseRssItems(xml: string, source: string): NewsAlert[] {
     // Filter: only Rome-relevant transport/mobility news
     const lower = title.toLowerCase();
     const isRelevant =
-      [...STRIKE_KEYWORDS, ...ROAD_KEYWORDS, ...EVENT_KEYWORDS, ...TRANSPORT_KEYWORDS].some((k) => lower.includes(k)) ||
-      lower.includes("roma") || lower.includes("traffico") || lower.includes("mobilit");
+      [...STRIKE_KEYWORDS, ...ROAD_KEYWORDS, ...EVENT_KEYWORDS, ...TRANSPORT_KEYWORDS, ...CRIME_KEYWORDS].some((k) => lower.includes(k)) ||
+      lower.includes("roma") || lower.includes("traffico") || lower.includes("mobilit") || lower.includes("sicurezza");
 
     if (title && isRelevant) {
       items.push({
@@ -54,6 +56,10 @@ const RSS_FEEDS = [
     source: "Google News",
   },
   {
+    url: "https://news.google.com/rss/search?q=roma+furto+OR+rapina+OR+aggressione+OR+scippo+OR+borseggio+OR+sicurezza+quartiere&hl=it&gl=IT&ceid=IT:it",
+    source: "Google News",
+  },
+  {
     url: "https://www.romatoday.it/rss/trasporti/",
     source: "RomaToday",
   },
@@ -70,7 +76,7 @@ export async function GET() {
     const results = await Promise.allSettled(
       RSS_FEEDS.map(async (feed) => {
         const res = await fetch(feed.url, {
-          headers: { "User-Agent": "UrbanMove/1.0" },
+          headers: { "User-Agent": "R-Home/1.0" },
           next: { revalidate: 600 }, // Cache 10 min
         });
         if (!res.ok) return [];

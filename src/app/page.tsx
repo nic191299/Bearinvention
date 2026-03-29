@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useCallback, useEffect } from "react";
-import { LatLng, Report, NewsAlert } from "@/lib/types";
+import { LatLng, Report, ReportType, NewsAlert, SAFETY_TYPES } from "@/lib/types";
 import { initialReports } from "@/lib/mockData";
 import { useGeolocation } from "@/lib/useGeolocation";
 import { fetchWeather, getWeatherAlert, WeatherData, WeatherAlert } from "@/lib/weather";
@@ -11,6 +11,7 @@ import WeatherBar from "@/components/WeatherBar";
 import NewsAlerts from "@/components/NewsAlerts";
 import ReportIcons from "@/components/ReportIcons";
 import ChatBot from "@/components/ChatBot";
+import SOSButton from "@/components/SOSButton";
 
 const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 
@@ -66,7 +67,7 @@ export default function Home() {
     setRouteInfo(info);
   }, []);
 
-  const handleReport = useCallback((type: "road_closed" | "danger" | "slowdown") => {
+  const handleReport = useCallback((type: ReportType) => {
     setReports((prev) => [{
       id: `r${Date.now()}`,
       type,
@@ -75,6 +76,9 @@ export default function Home() {
       upvotes: 0,
     }, ...prev]);
   }, [position]);
+
+  // Count safety reports for route warnings
+  const safetyCount = reports.filter((r) => SAFETY_TYPES.includes(r.type)).length;
 
   const handleClear = useCallback(() => {
     setOrigin(null); setDestination(null); setOriginText(""); setDestText("");
@@ -114,6 +118,7 @@ export default function Home() {
           onUseMyLocation={() => { setOrigin(position); setOriginText("La mia posizione"); }}
           onClear={handleClear}
           apiLoaded={!!API_KEY}
+          safetyCount={routeActive ? safetyCount : 0}
         />
         <WeatherBar weather={weather} alert={weatherAlert} />
         <NewsAlerts onAlerts={setNewsAlerts} />
@@ -144,14 +149,15 @@ export default function Home() {
         </button>
       </div>
 
-      {/* === BOTTOM-LEFT: Chatbot icon === */}
+      {/* === BOTTOM-LEFT: Chatbot + SOS === */}
       <button
         onClick={() => setChatOpen(true)}
-        className="absolute bottom-20 md:bottom-6 left-3 z-20 w-13 h-13 md:w-14 md:h-14 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 transition active:scale-90"
-        style={{ width: 52, height: 52 }}
+        className="absolute bottom-20 md:bottom-6 left-3 z-20 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 transition active:scale-90"
+        style={{ width: 48, height: 48 }}
       >
-        <span className="material-symbols-outlined text-[24px]">smart_toy</span>
+        <span className="material-symbols-outlined text-[22px]">smart_toy</span>
       </button>
+      <SOSButton userPosition={position} />
 
       {/* === BRANDING === */}
       <div className="absolute top-3 left-3 z-10 glass rounded-xl shadow-lg px-3 py-2 flex items-center gap-2">

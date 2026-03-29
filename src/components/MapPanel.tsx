@@ -67,6 +67,7 @@ const NEWS_MARKER_CONFIG: Record<string, { icon: string; color: string; label: s
   strike: { icon: "front_hand", color: "#ef4444", label: "Sciopero" },
   event: { icon: "event", color: "#eab308", label: "Evento" },
   transport: { icon: "directions_bus", color: "#ef4444", label: "Problema trasporti" },
+  crime: { icon: "local_police", color: "#dc2626", label: "Sicurezza" },
 };
 
 interface MapPanelProps {
