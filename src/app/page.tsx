@@ -227,46 +227,26 @@ export default function Home() {
             </div>
           )}
 
-          {/* Map controls */}
+          {/* Map controls - top right */}
           <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
             <button
               onClick={recenter}
-              className="glass shadow-lg rounded-2xl w-12 h-12 flex items-center justify-center hover:bg-white transition"
+              className="glass shadow-lg rounded-full w-11 h-11 flex items-center justify-center hover:bg-white transition"
             >
-              <span className="material-symbols-outlined text-blue-600 text-[22px]">my_location</span>
-            </button>
-            <button
-              onClick={() => setShowRadar(!showRadar)}
-              className={`shadow-lg rounded-2xl w-12 h-12 flex items-center justify-center transition ${
-                showRadar ? "bg-blue-600 text-white" : "glass hover:bg-white"
-              }`}
-            >
-              <span className={`material-symbols-outlined text-[22px] ${showRadar ? "" : "text-blue-600"}`}>rainy</span>
+              <span className="material-symbols-outlined text-blue-600 text-[20px]">my_location</span>
             </button>
           </div>
 
-          {/* Quick report FAB */}
-          <QuickReportFab userPosition={position} onReport={handleQuickReport} />
-
-          {/* Floating AI button */}
+          {/* Chatbot icon only - bottom left */}
           <button
             onClick={() => setChatOpen(true)}
-            className="absolute bottom-24 md:bottom-6 right-4 z-10 bg-blue-600 text-white shadow-xl rounded-2xl px-5 py-3 flex items-center gap-2 hover:bg-blue-700 transition hover:shadow-2xl"
+            className="absolute bottom-24 md:bottom-6 left-4 z-20 w-14 h-14 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 transition active:scale-90"
           >
-            <span className="material-symbols-outlined text-[20px]">smart_toy</span>
-            <span className="text-sm font-semibold hidden sm:inline">Assistente AI</span>
+            <span className="material-symbols-outlined text-[26px]">smart_toy</span>
           </button>
 
-          {/* Mobile SOS */}
-          <div className="md:hidden absolute bottom-24 left-4 right-20 z-10">
-            <button
-              onClick={() => setChatOpen(true)}
-              className="w-full bg-red-500 text-white shadow-xl rounded-2xl py-3 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-red-600 transition"
-            >
-              <span className="material-symbols-outlined text-[18px]">warning</span>
-              Sono bloccato, aiutami!
-            </button>
-          </div>
+          {/* Waze-style report FAB - bottom right */}
+          <QuickReportFab userPosition={position} onReport={handleQuickReport} />
         </div>
 
         {/* Mobile bottom nav */}

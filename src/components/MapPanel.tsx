@@ -11,7 +11,7 @@ import {
   Circle,
 } from "@react-google-maps/api";
 import { LatLng, TransportReport, SafetyReport, TRANSPORT_TYPES, SAFETY_TYPES, RouteState } from "@/lib/types";
-import { RadarFrame, fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
+import { fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
 import { WeatherZonePoint, fetchWeatherZones } from "@/lib/weatherZones";
 import { crimeZones, RISK_COLORS, CrimeZone } from "@/lib/crimeData";
 
@@ -37,6 +37,35 @@ interface MapPanelProps {
   onSelectReport: (r: TransportReport | SafetyReport | null) => void;
 }
 
+// Check if a point is near a route polyline
+function isNearRoute(point: LatLng, routeResult: google.maps.DirectionsResult | null, thresholdMeters: number = 200): boolean {
+  if (!routeResult) return false;
+  const route = routeResult.routes[0];
+  if (!route) return false;
+
+  for (const leg of route.legs) {
+    for (const step of leg.steps) {
+      if (step.path) {
+        for (const pathPoint of step.path) {
+          const dist = haversine(point.lat, point.lng, pathPoint.lat(), pathPoint.lng());
+          if (dist < thresholdMeters) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function MapPanel({
   apiKey,
   userPosition,
@@ -58,17 +87,18 @@ export default function MapPanel({
   const [weatherZones, setWeatherZones] = useState<WeatherZonePoint[]>([]);
   const [selectedCrimeZone, setSelectedCrimeZone] = useState<CrimeZone | null>(null);
   const [selectedWeatherZone, setSelectedWeatherZone] = useState<WeatherZonePoint | null>(null);
+  const [zoom, setZoom] = useState(14);
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    map.addListener("zoom_changed", () => {
+      setZoom(map.getZoom() || 14);
+    });
   }, []);
 
   // Fetch weather zones
   useEffect(() => {
-    if (!showRadar) {
-      setWeatherZones([]);
-      return;
-    }
+    if (!showRadar) { setWeatherZones([]); return; }
     fetchWeatherZones().then(setWeatherZones);
     const interval = setInterval(() => fetchWeatherZones().then(setWeatherZones), 10 * 60 * 1000);
     return () => clearInterval(interval);
@@ -81,11 +111,9 @@ export default function MapPanel({
       onDirectionsResult(null, null);
       return;
     }
-
-    const directionsService = new google.maps.DirectionsService();
+    const svc = new google.maps.DirectionsService();
     const travelMode = route.mode === "SAFE_WALK" ? google.maps.TravelMode.WALKING : route.mode;
-
-    directionsService.route(
+    svc.route(
       {
         origin: route.origin,
         destination: route.destination,
@@ -99,10 +127,7 @@ export default function MapPanel({
         if (status === "OK" && result) {
           setDirections(result);
           const leg = result.routes[0]?.legs[0];
-          onDirectionsResult(result, leg ? {
-            distance: leg.distance?.text || "",
-            duration: leg.duration?.text || "",
-          } : null);
+          onDirectionsResult(result, leg ? { distance: leg.distance?.text || "", duration: leg.duration?.text || "" } : null);
         } else {
           setDirections(null);
           onDirectionsResult(null, null);
@@ -111,14 +136,12 @@ export default function MapPanel({
     );
   }, [isLoaded, route.origin, route.destination, route.mode, route.active, onDirectionsResult]);
 
-  // Pan to user on first load
+  // Pan on first load
   useEffect(() => {
-    if (mapRef.current && userPosition) {
-      mapRef.current.panTo(userPosition);
-    }
+    if (mapRef.current) mapRef.current.panTo(userPosition);
   }, []);
 
-  // Radar overlay
+  // Radar overlay - with zoom level clamping
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -127,35 +150,59 @@ export default function MapPanel({
       map.overlayMapTypes.clear();
       radarOverlayRef.current = null;
     }
-
     if (!showRadar) return;
 
     fetchRadarFrames().then((frames) => {
-      if (!frames || !map) return;
+      if (!frames || !mapRef.current) return;
       const allFrames = [...frames.past, ...frames.nowcast];
       const latestFrame = allFrames[allFrames.length - 1];
       if (!latestFrame) return;
 
       const tileUrl = getRadarTileUrl(latestFrame, 256);
       const radarLayer = new google.maps.ImageMapType({
-        getTileUrl: (coord, zoom) => {
+        getTileUrl: (coord, z) => {
+          // RainViewer supports zoom 1-12. For higher zoom, use z=12 tiles
+          const clampedZoom = Math.min(z, 12);
+          if (clampedZoom !== z) {
+            // Scale tile coordinates for higher zoom levels
+            const scale = Math.pow(2, z - clampedZoom);
+            const scaledX = Math.floor(coord.x / scale);
+            const scaledY = Math.floor(coord.y / scale);
+            return tileUrl
+              .replace("{z}", String(clampedZoom))
+              .replace("{x}", String(scaledX))
+              .replace("{y}", String(scaledY));
+          }
           return tileUrl
-            .replace("{z}", String(zoom))
+            .replace("{z}", String(z))
             .replace("{x}", String(coord.x))
             .replace("{y}", String(coord.y));
         },
         tileSize: new google.maps.Size(256, 256),
-        opacity: 0.55,
+        opacity: 0.5,
         name: "RainViewer",
       });
 
-      map.overlayMapTypes.push(radarLayer);
+      mapRef.current.overlayMapTypes.push(radarLayer);
       radarOverlayRef.current = radarLayer;
     });
   }, [isLoaded, showRadar]);
 
-  // Check if it's night for crime risk multiplier
   const isNight = new Date().getHours() >= 21 || new Date().getHours() < 6;
+
+  // Determine which reports to show:
+  // - Always show if zoomed in (>= 15)
+  // - Always show if on active route
+  // - Otherwise hide individual reports (zones still visible)
+  const shouldShowReports = zoom >= 15;
+  const hasActiveRoute = !!directions;
+
+  const visibleTransportReports = transportReports.filter((r) =>
+    shouldShowReports || (hasActiveRoute && isNearRoute(r.position, directions))
+  );
+  const visibleSafetyReports = safetyReports.filter((r) =>
+    shouldShowReports || (hasActiveRoute && isNearRoute(r.position, directions))
+  );
 
   if (!isLoaded) {
     return (
@@ -194,13 +241,10 @@ export default function MapPanel({
     >
       {showTraffic && <TrafficLayer />}
 
-      {/* ===== CRIME ZONES ===== */}
+      {/* ===== CRIME ZONES (always visible when layer on) ===== */}
       {showSafetyLayer && crimeZones.map((zone) => {
-        const effectiveRisk = isNight
-          ? Math.min(5, Math.round(zone.riskLevel * zone.nightRiskMultiplier))
-          : zone.riskLevel;
+        const effectiveRisk = isNight ? Math.min(5, Math.round(zone.riskLevel * zone.nightRiskMultiplier)) : zone.riskLevel;
         const color = RISK_COLORS[effectiveRisk] || RISK_COLORS[zone.riskLevel];
-
         return (
           <Circle
             key={zone.id}
@@ -208,71 +252,44 @@ export default function MapPanel({
             radius={zone.radius}
             options={{
               fillColor: color,
-              fillOpacity: 0.18 + (effectiveRisk * 0.04),
+              fillOpacity: 0.18 + effectiveRisk * 0.04,
               strokeColor: color,
               strokeOpacity: 0.5,
               strokeWeight: 2,
               clickable: true,
             }}
-            onClick={() => {
-              setSelectedCrimeZone(zone);
-              setSelectedWeatherZone(null);
-              onSelectReport(null);
-            }}
+            onClick={() => { setSelectedCrimeZone(zone); setSelectedWeatherZone(null); onSelectReport(null); }}
           />
         );
       })}
 
-      {/* Crime zone labels */}
       {showSafetyLayer && crimeZones.map((zone) => {
-        const effectiveRisk = isNight
-          ? Math.min(5, Math.round(zone.riskLevel * zone.nightRiskMultiplier))
-          : zone.riskLevel;
-
+        const effectiveRisk = isNight ? Math.min(5, Math.round(zone.riskLevel * zone.nightRiskMultiplier)) : zone.riskLevel;
         return (
           <Marker
-            key={`czlabel-${zone.id}`}
+            key={`czl-${zone.id}`}
             position={zone.center}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 0,
-            }}
-            label={{
-              text: `${zone.name}\n★${effectiveRisk}`,
-              color: RISK_COLORS[effectiveRisk],
-              fontSize: "10px",
-              fontWeight: "bold",
-            }}
+            icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 0 }}
+            label={{ text: `${zone.name} ★${effectiveRisk}`, color: RISK_COLORS[effectiveRisk], fontSize: "10px", fontWeight: "bold" }}
             clickable={false}
             zIndex={30}
           />
         );
       })}
 
-      {/* Crime zone info window */}
       {selectedCrimeZone && (
-        <InfoWindow
-          position={selectedCrimeZone.center}
-          onCloseClick={() => setSelectedCrimeZone(null)}
-        >
+        <InfoWindow position={selectedCrimeZone.center} onCloseClick={() => setSelectedCrimeZone(null)}>
           <div className="p-2 max-w-[280px]">
             <div className="flex items-center gap-2 mb-2">
-              <span
-                className="text-xs font-bold px-2 py-1 rounded-lg text-white"
-                style={{ backgroundColor: RISK_COLORS[selectedCrimeZone.riskLevel] }}
-              >
+              <span className="text-xs font-bold px-2 py-1 rounded-lg text-white" style={{ backgroundColor: RISK_COLORS[selectedCrimeZone.riskLevel] }}>
                 Rischio {selectedCrimeZone.riskLabel}
               </span>
               {isNight && selectedCrimeZone.nightRiskMultiplier > 1.3 && (
-                <span className="text-[10px] bg-gray-800 text-yellow-300 px-2 py-0.5 rounded font-medium">
-                  +pericoloso di notte
-                </span>
+                <span className="text-[10px] bg-gray-800 text-yellow-300 px-2 py-0.5 rounded font-medium">+pericoloso di notte</span>
               )}
             </div>
             <h3 style={{ fontWeight: 700, fontSize: 14, margin: "0 0 4px" }}>{selectedCrimeZone.name}</h3>
-            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 8px", lineHeight: 1.4 }}>
-              {selectedCrimeZone.details}
-            </p>
+            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 8px", lineHeight: 1.4 }}>{selectedCrimeZone.details}</p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {Object.entries(selectedCrimeZone.stats).map(([key, val]) => (
                 <div key={key} style={{ fontSize: 10, color: "#94a3b8" }}>
@@ -299,40 +316,23 @@ export default function MapPanel({
             strokeWeight: 2,
             clickable: true,
           }}
-          onClick={() => {
-            setSelectedWeatherZone(wz);
-            setSelectedCrimeZone(null);
-            onSelectReport(null);
-          }}
+          onClick={() => { setSelectedWeatherZone(wz); setSelectedCrimeZone(null); onSelectReport(null); }}
         />
       ))}
 
-      {/* Weather zone markers */}
       {showRadar && weatherZones.map((wz, i) => (
         <Marker
           key={`wzm-${i}`}
           position={wz.position}
-          icon={{
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 0,
-          }}
-          label={{
-            text: `${Math.round(wz.temperature)}°`,
-            color: wz.precipitation > 0 ? "#2563eb" : "#374151",
-            fontSize: "11px",
-            fontWeight: "bold",
-          }}
+          icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 0 }}
+          label={{ text: `${Math.round(wz.temperature)}°`, color: wz.precipitation > 0 ? "#2563eb" : "#374151", fontSize: "11px", fontWeight: "bold" }}
           clickable={false}
           zIndex={35}
         />
       ))}
 
-      {/* Weather zone info window */}
       {selectedWeatherZone && (
-        <InfoWindow
-          position={selectedWeatherZone.position}
-          onCloseClick={() => setSelectedWeatherZone(null)}
-        >
+        <InfoWindow position={selectedWeatherZone.position} onCloseClick={() => setSelectedWeatherZone(null)}>
           <div className="p-2 max-w-[220px]">
             <h3 style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{selectedWeatherZone.name}</h3>
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
@@ -340,14 +340,12 @@ export default function MapPanel({
               <span style={{ fontSize: 12, color: "#64748b" }}>{selectedWeatherZone.label}</span>
             </div>
             <div style={{ fontSize: 11, color: "#64748b" }}>
-              {selectedWeatherZone.precipitation > 0 && (
-                <div>Precipitazioni: {selectedWeatherZone.precipitation}mm</div>
-              )}
+              {selectedWeatherZone.precipitation > 0 && <div>Precipitazioni: {selectedWeatherZone.precipitation}mm</div>}
               <div>Vento: {Math.round(selectedWeatherZone.windSpeed)} km/h (raffiche {Math.round(selectedWeatherZone.windGusts)})</div>
             </div>
             {selectedWeatherZone.precipitation > 0.5 && (
               <div style={{ marginTop: 6, padding: "4px 8px", background: "#eff6ff", borderRadius: 8, fontSize: 11, color: "#2563eb", fontWeight: 500 }}>
-                Piove in questa zona — meglio la metro!
+                Piove qui — meglio la metro!
               </div>
             )}
           </div>
@@ -357,43 +355,24 @@ export default function MapPanel({
       {/* ===== USER POSITION ===== */}
       <Marker
         position={userPosition}
-        icon={{
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        }}
+        icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#2563eb", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 3 }}
         zIndex={100}
       />
       <Marker
         position={userPosition}
-        icon={{
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 25,
-          fillColor: "#2563eb",
-          fillOpacity: 0.15,
-          strokeColor: "#2563eb",
-          strokeWeight: 1,
-          strokeOpacity: 0.3,
-        }}
+        icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 25, fillColor: "#2563eb", fillOpacity: 0.15, strokeColor: "#2563eb", strokeWeight: 1, strokeOpacity: 0.3 }}
         zIndex={99}
         clickable={false}
       />
 
-      {/* ===== TRANSPORT REPORTS ===== */}
-      {transportReports.map((report) => {
+      {/* ===== REPORTS (visible only when zoomed in or on route) ===== */}
+      {visibleTransportReports.map((report) => {
         const config = TRANSPORT_TYPES[report.type];
         return (
           <Marker
             key={report.id}
             position={report.position}
-            onClick={() => {
-              onSelectReport(report);
-              setSelectedCrimeZone(null);
-              setSelectedWeatherZone(null);
-            }}
+            onClick={() => { onSelectReport(report); setSelectedCrimeZone(null); setSelectedWeatherZone(null); }}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
               scale: 14,
@@ -411,37 +390,21 @@ export default function MapPanel({
         );
       })}
 
-      {/* ===== SAFETY REPORTS ===== */}
-      {showSafetyLayer && safetyReports.map((report) => {
+      {showSafetyLayer && visibleSafetyReports.map((report) => {
         const config = SAFETY_TYPES[report.type];
         return (
           <Marker
             key={report.id}
             position={report.position}
-            onClick={() => {
-              onSelectReport(report);
-              setSelectedCrimeZone(null);
-              setSelectedWeatherZone(null);
-            }}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 12,
-              fillColor: config.color,
-              fillOpacity: 0.8,
-              strokeColor: "#ffffff",
-              strokeWeight: 2,
-            }}
+            onClick={() => { onSelectReport(report); setSelectedCrimeZone(null); setSelectedWeatherZone(null); }}
+            icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: config.color, fillOpacity: 0.8, strokeColor: "#ffffff", strokeWeight: 2 }}
             zIndex={40}
           />
         );
       })}
 
-      {/* Report info window */}
       {selectedReport && (
-        <InfoWindow
-          position={selectedReport.position}
-          onCloseClick={() => onSelectReport(null)}
-        >
+        <InfoWindow position={selectedReport.position} onCloseClick={() => onSelectReport(null)}>
           <div className="p-2 max-w-[250px]">
             <div className="flex items-center gap-2 mb-1">
               <span
