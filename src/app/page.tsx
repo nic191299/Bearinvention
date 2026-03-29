@@ -12,6 +12,7 @@ import RoutePanel from "@/components/RoutePanel";
 import ReportPanel from "@/components/ReportPanel";
 import WeatherBar from "@/components/WeatherBar";
 import ChatBot from "@/components/ChatBot";
+import QuickReportFab from "@/components/QuickReportFab";
 
 const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 
@@ -29,7 +30,7 @@ const INITIAL_ROUTE: RouteState = {
 export default function Home() {
   const { position, recenter } = useGeolocation();
   const [transportReports, setTransportReports] = useState<TransportReport[]>(initialTransportReports);
-  const [safetyReports] = useState<SafetyReport[]>(initialSafetyReports);
+  const [safetyReports, setSafetyReports] = useState<SafetyReport[]>(initialSafetyReports);
   const [chatOpen, setChatOpen] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [showSafety, setShowSafety] = useState(false);
@@ -102,6 +103,38 @@ export default function Home() {
 
   const handleUpvote = useCallback((id: string) => {
     setTransportReports((prev) => prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + 1 } : r)));
+  }, []);
+
+  const handleQuickReport = useCallback((report: { type: string; category: "transport" | "safety"; message: string; position: LatLng }) => {
+    if (report.category === "transport") {
+      setTransportReports((prev) => [
+        {
+          id: `tr${Date.now()}`,
+          type: report.type as TransportReport["type"],
+          position: report.position,
+          message: report.message,
+          author: "Utente anonimo",
+          timestamp: new Date(),
+          upvotes: 0,
+        },
+        ...prev,
+      ]);
+    } else {
+      setSafetyReports((prev) => [
+        {
+          id: `sr${Date.now()}`,
+          type: report.type as SafetyReport["type"],
+          position: report.position,
+          message: report.message,
+          author: "Utente anonimo",
+          timestamp: new Date(),
+          upvotes: 0,
+          confirmedSafe: 0,
+          timeOfDay: new Date().getHours() >= 20 || new Date().getHours() < 6 ? "night" : "day",
+        },
+        ...prev,
+      ]);
+    }
   }, []);
 
   return (
@@ -211,6 +244,9 @@ export default function Home() {
               <span className={`material-symbols-outlined text-[22px] ${showRadar ? "" : "text-blue-600"}`}>rainy</span>
             </button>
           </div>
+
+          {/* Quick report FAB */}
+          <QuickReportFab userPosition={position} onReport={handleQuickReport} />
 
           {/* Floating AI button */}
           <button
