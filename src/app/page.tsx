@@ -46,7 +46,7 @@ export default function Home() {
 
   // Geolocation gate
   const [geoStarted, setGeoStarted] = useState(false);
-  const { position, recenter, permissionState, requestPermission } = useGeolocation(!geoStarted);
+  const { position, watching, recenter, permissionState, requestPermission } = useGeolocation(!geoStarted);
 
   const [city, setCity] = useState<CityInfo | null>(null);
   const [cityLoaded, setCityLoaded] = useState(false);
@@ -135,6 +135,20 @@ export default function Home() {
     const i = setInterval(load, 2 * 60 * 1000);
     return () => clearInterval(i);
   }, [city?.id]);
+
+  // ── News (fetched when city changes, refreshed every 15 min) ─
+  useEffect(() => {
+    if (!city) return;
+    const load = () => {
+      fetch(`/api/news?city=${encodeURIComponent(city.name)}`)
+        .then(r => r.json())
+        .then(d => { if (d.alerts) setNewsAlerts(d.alerts); })
+        .catch(() => {});
+    };
+    load();
+    const i = setInterval(load, 15 * 60 * 1000);
+    return () => clearInterval(i);
+  }, [city?.name]);
 
   // ── Family location sharing ───────────────────────────────
   useEffect(() => {
@@ -318,6 +332,7 @@ export default function Home() {
       <MapPanel
         apiKey={API_KEY}
         userPosition={position}
+        userWatching={watching}
         cityCenter={cityCenter}
         reports={reports}
         newsAlerts={newsAlerts}
@@ -403,6 +418,7 @@ export default function Home() {
             apiLoaded={!!API_KEY}
             city={city}
             reports={reports}
+            newsAlerts={newsAlerts}
           />
         )}
 

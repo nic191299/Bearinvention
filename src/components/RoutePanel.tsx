@@ -1,10 +1,15 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { LatLng, Report, REPORT_CONFIG, SAFETY_TYPES } from "@/lib/types";
-import { haversine } from "@/lib/geo";
+import { LatLng, Report, NewsAlert, REPORT_CONFIG, SAFETY_TYPES } from "@/lib/types";
 import { getCityBounds } from "@/lib/cityData";
 import type { CityInfo } from "@/lib/cityData";
+
+interface NewsWarning {
+  title: string;
+  source: string;
+  category: NewsAlert["category"];
+}
 
 interface RoutePanelProps {
   origin: LatLng | null;
@@ -21,6 +26,25 @@ interface RoutePanelProps {
   apiLoaded: boolean;
   city?: CityInfo | null;
   reports?: Report[];
+  newsAlerts?: NewsAlert[];
+}
+
+const NEWS_CATEGORY_LABEL: Record<string, string> = {
+  crime: "Episodio segnalato nelle notizie",
+  road_closure: "Chiusura strada segnalata",
+  strike: "Sciopero in zona",
+  event: "Evento in zona",
+};
+
+const NEWS_CRIME_KEYWORDS = [
+  "borseggio", "furto", "rapina", "scippo", "aggressione",
+  "violenza", "stupro", "molestie", "accoltellamento", "rissa", "spaccio",
+];
+
+function isNewsDangerous(alert: NewsAlert): boolean {
+  if (alert.category === "crime") return true;
+  const lower = alert.title.toLowerCase();
+  return NEWS_CRIME_KEYWORDS.some(k => lower.includes(k));
 }
 
 export default function RoutePanel({
@@ -36,13 +60,19 @@ export default function RoutePanel({
   apiLoaded,
   city,
   reports = [],
+  newsAlerts = [],
 }: RoutePanelProps) {
   const destRef = useRef<HTMLInputElement>(null);
   const originInputRef = useRef<HTMLInputElement>(null);
   const [editOrigin, setEditOrigin] = useState(false);
-  const [safetyWarnings, setSafetyWarnings] = useState<{ type: string; label: string; color: string; count: number }[]>([]);
+  const [reportWarnings, setReportWarnings] = useState<{ type: string; label: string; color: string; count: number }[]>([]);
+  const [newsWarnings, setNewsWarnings] = useState<NewsWarning[]>([]);
 
-  // Set up autocomplete (re-runs when city changes to update bounds)
+  // Refs to track current positions
+  const originRef = useRef<LatLng | null>(null);
+  const destPosRef = useRef<LatLng | null>(null);
+
+  // Autocomplete setup
   useEffect(() => {
     if (!apiLoaded || !window.google?.maps?.places) return;
     const b = city ? getCityBounds(city) : { lat1: 41.79, lng1: 12.35, lat2: 41.99, lng2: 12.65 };
@@ -54,7 +84,10 @@ export default function RoutePanel({
       ac.addListener("place_changed", () => {
         const place = ac.getPlace();
         if (place.geometry?.location)
-          onDestinationSelect({ lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }, place.name || place.formatted_address || "");
+          handleDestSelect(
+            { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
+            place.name || place.formatted_address || ""
+          );
       });
     }
     if (originInputRef.current) {
@@ -62,45 +95,68 @@ export default function RoutePanel({
       ac.addListener("place_changed", () => {
         const place = ac.getPlace();
         if (place.geometry?.location) {
-          onOriginSelect({ lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }, place.name || place.formatted_address || "");
+          handleOriginSelect(
+            { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
+            place.name || place.formatted_address || ""
+          );
           setEditOrigin(false);
         }
       });
     }
-  }, [apiLoaded, editOrigin, city, onOriginSelect, onDestinationSelect]);
+  }, [apiLoaded, editOrigin, city]);
 
-  // Compute safety warnings along route (simple bounding box)
+  // Safety analysis: user reports + news
   useEffect(() => {
-    if (!routeInfo || reports.length === 0) { setSafetyWarnings([]); return; }
-    const [originPos, destPos] = [originRef.current, destPosRef.current];
-    if (!originPos || !destPos) { setSafetyWarnings([]); return; }
+    if (!routeInfo) { setReportWarnings([]); setNewsWarnings([]); return; }
+    const originPos = originRef.current;
+    const destPos = destPosRef.current;
+    if (!originPos || !destPos) { setReportWarnings([]); setNewsWarnings([]); return; }
 
-    const minLat = Math.min(originPos.lat, destPos.lat) - 0.008;
-    const maxLat = Math.max(originPos.lat, destPos.lat) + 0.008;
-    const minLng = Math.min(originPos.lng, destPos.lng) - 0.008;
-    const maxLng = Math.max(originPos.lng, destPos.lng) + 0.008;
+    const pad = 0.012; // ~1.3km padding around route bbox
+    const minLat = Math.min(originPos.lat, destPos.lat) - pad;
+    const maxLat = Math.max(originPos.lat, destPos.lat) + pad;
+    const minLng = Math.min(originPos.lng, destPos.lng) - pad;
+    const maxLng = Math.max(originPos.lng, destPos.lng) + pad;
 
-    const near = reports.filter(r =>
-      r.position.lat >= minLat && r.position.lat <= maxLat &&
-      r.position.lng >= minLng && r.position.lng <= maxLng
-    );
+    const inBox = (pos: LatLng) =>
+      pos.lat >= minLat && pos.lat <= maxLat && pos.lng >= minLng && pos.lng <= maxLng;
 
+    // ── User reports ──────────────────────────────────────────
+    const near = reports.filter(r => inBox(r.position));
     const counts: Record<string, number> = {};
     for (const r of near) counts[r.type] = (counts[r.type] || 0) + 1;
-
-    const warnings = Object.entries(counts).map(([type, count]) => ({
+    const rw = Object.entries(counts).map(([type, count]) => ({
       type,
       label: REPORT_CONFIG[type as keyof typeof REPORT_CONFIG]?.label || type,
       color: REPORT_CONFIG[type as keyof typeof REPORT_CONFIG]?.color || "#6b7280",
       count,
     }));
-    warnings.sort((a, b) => (SAFETY_TYPES.includes(a.type as never) ? -1 : 1) - (SAFETY_TYPES.includes(b.type as never) ? -1 : 1));
-    setSafetyWarnings(warnings);
-  }, [routeInfo, reports]);
+    rw.sort((a, b) => (SAFETY_TYPES.includes(a.type as never) ? -1 : 1) - (SAFETY_TYPES.includes(b.type as never) ? -1 : 1));
+    setReportWarnings(rw);
 
-  // Refs to track current positions for the warning calculation
-  const originRef = useRef<LatLng | null>(null);
-  const destPosRef = useRef<LatLng | null>(null);
+    // ── News-based dangers ────────────────────────────────────
+    // 1. Geocoded news with real position in route bbox
+    const geocodedDangers = newsAlerts
+      .filter(n => isNewsDangerous(n) && n.position && inBox(n.position))
+      .map(n => ({
+        title: n.title.length > 70 ? n.title.slice(0, 70) + "…" : n.title,
+        source: n.source,
+        category: n.category,
+      }));
+
+    // 2. Non-geocoded crime news: treat as city-wide warning (show max 2)
+    const nonGeocodedDangers = newsAlerts
+      .filter(n => isNewsDangerous(n) && !n.position)
+      .slice(0, 2)
+      .map(n => ({
+        title: n.title.length > 70 ? n.title.slice(0, 70) + "…" : n.title,
+        source: n.source,
+        category: n.category,
+      }));
+
+    const allNews = [...geocodedDangers, ...nonGeocodedDangers].slice(0, 4);
+    setNewsWarnings(allNews);
+  }, [routeInfo, reports, newsAlerts]);
 
   const handleOriginSelect = (pos: LatLng, text: string) => {
     originRef.current = pos;
@@ -110,12 +166,10 @@ export default function RoutePanel({
     destPosRef.current = pos;
     onDestinationSelect(pos, text);
   };
-  const handleMyLocation = () => {
-    onUseMyLocation();
-  };
 
-  const safetyCount = safetyWarnings.filter(w => SAFETY_TYPES.includes(w.type as never)).length;
-  const isRouteSafe = safetyCount === 0 && safetyWarnings.length === 0;
+  const hasAnySafety = SAFETY_TYPES.some(t => reportWarnings.find(w => w.type === t));
+  const isRouteSafe = reportWarnings.length === 0 && newsWarnings.length === 0;
+  const dangerLevel = newsWarnings.length > 0 || hasAnySafety ? "high" : reportWarnings.length > 0 ? "medium" : "safe";
 
   return (
     <div className="glass rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
@@ -146,8 +200,7 @@ export default function RoutePanel({
                 </span>
                 <span
                   className="material-symbols-outlined text-[14px] text-blue-400 hover:text-blue-600 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); handleMyLocation(); setEditOrigin(false); }}
-                  title="Usa posizione attuale"
+                  onClick={(e) => { e.stopPropagation(); onUseMyLocation(); setEditOrigin(false); }}
                 >
                   gps_fixed
                 </span>
@@ -158,7 +211,7 @@ export default function RoutePanel({
               type="text"
               placeholder="Dove vai?"
               defaultValue={destinationText}
-              onChange={(e) => { if (!e.target.value) { destPosRef.current = null; } }}
+              onChange={(e) => { if (!e.target.value) destPosRef.current = null; }}
               className="w-full px-3 py-2 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
             />
           </div>
@@ -200,26 +253,50 @@ export default function RoutePanel({
 
           {/* Safety summary */}
           {isRouteSafe ? (
-            <div className="flex items-center gap-2 px-2.5 py-2 bg-green-50 rounded-xl border border-green-100">
-              <span className="material-symbols-outlined text-green-500 text-[16px]">verified_user</span>
-              <span className="text-[11px] text-green-700 font-medium">Percorso senza segnalazioni attive</span>
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
+              <span className="material-symbols-outlined text-green-500 text-[18px]">verified_user</span>
+              <span className="text-[11px] text-green-700 font-semibold">Nessuna segnalazione lungo il percorso</span>
             </div>
           ) : (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 rounded-xl border border-amber-100">
-                <span className="material-symbols-outlined text-amber-500 text-[14px]">warning</span>
-                <span className="text-[10px] text-amber-700 font-semibold">
-                  {safetyWarnings.reduce((s, w) => s + w.count, 0)} segnalazioni lungo il percorso
+              {/* Danger level header */}
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                dangerLevel === "high"
+                  ? "bg-red-50 border-red-200"
+                  : "bg-amber-50 border-amber-100"
+              }`}>
+                <span className={`material-symbols-outlined text-[16px] ${dangerLevel === "high" ? "text-red-500" : "text-amber-500"}`}>
+                  {dangerLevel === "high" ? "dangerous" : "warning"}
+                </span>
+                <span className={`text-[11px] font-bold ${dangerLevel === "high" ? "text-red-700" : "text-amber-700"}`}>
+                  {dangerLevel === "high"
+                    ? "Zona a rischio — valuta percorso alternativo"
+                    : `${reportWarnings.reduce((s, w) => s + w.count, 0)} segnalazioni lungo il percorso`}
                 </span>
               </div>
-              {safetyWarnings.slice(0, 3).map((w) => (
-                <div key={w.type} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: w.color + "12" }}>
+
+              {/* News-based dangers */}
+              {newsWarnings.map((nw, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
+                  <span className="material-symbols-outlined text-red-500 text-[14px] mt-0.5 shrink-0">newspaper</span>
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-bold text-red-400 uppercase tracking-wide mb-0.5">
+                      {nw.source} — notizia recente
+                    </div>
+                    <div className="text-[10px] text-red-800 font-medium leading-snug">{nw.title}</div>
+                  </div>
+                </div>
+              ))}
+
+              {/* User report warnings */}
+              {reportWarnings.slice(0, 3).map((w) => (
+                <div key={w.type} className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ backgroundColor: w.color + "12" }}>
                   <span className="material-symbols-outlined text-[13px]" style={{ color: w.color }}>
                     {REPORT_CONFIG[w.type as keyof typeof REPORT_CONFIG]?.icon || "info"}
                   </span>
                   <span className="text-[10px] font-medium" style={{ color: w.color }}>
-                    {w.count}× {w.label}
-                    {SAFETY_TYPES.includes(w.type as never) ? " — valuta percorso alternativo" : ""}
+                    {w.count}× {w.label} — segnalazione utenti
+                    {SAFETY_TYPES.includes(w.type as never) ? " ⚠️" : ""}
                   </span>
                 </div>
               ))}

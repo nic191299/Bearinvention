@@ -73,6 +73,7 @@ interface FamilyMember {
 interface MapPanelProps {
   apiKey: string;
   userPosition: LatLng;
+  userWatching?: boolean;
   cityCenter?: LatLng;
   reports: Report[];
   newsAlerts: NewsAlert[];
@@ -92,6 +93,7 @@ interface MapPanelProps {
 export default function MapPanel({
   apiKey,
   userPosition,
+  userWatching = false,
   cityCenter,
   reports,
   newsAlerts,
@@ -134,6 +136,16 @@ export default function MapPanel({
       mapRef.current.setZoom(14);
     }
   }, [cityCenter?.lat, cityCenter?.lng]);
+
+  // Auto-pan to real GPS position on first fix
+  const firstGpsPanRef = useRef(false);
+  useEffect(() => {
+    if (userWatching && !firstGpsPanRef.current && mapRef.current) {
+      firstGpsPanRef.current = true;
+      mapRef.current.panTo(userPosition);
+      mapRef.current.setZoom(15);
+    }
+  }, [userWatching, userPosition]);
 
   // Weather zones
   useEffect(() => {
