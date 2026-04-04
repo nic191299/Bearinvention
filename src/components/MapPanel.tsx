@@ -85,7 +85,7 @@ interface MapPanelProps {
   routeOrigin: LatLng | null;
   routeDestination: LatLng | null;
   routeMode: string;
-  routeActive: boolean;
+  routeActive: boolean;         // also controls news markers visibility
   onVote: (reportId: string, vote: 1 | -1) => void;
   familyMembers?: FamilyMember[];
 }
@@ -113,6 +113,7 @@ export default function MapPanel({
   const mapRef = useRef<google.maps.Map | null>(null);
   const radarRef = useRef<google.maps.ImageMapType | null>(null);
   const heatmapRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
+  const safetyOverlayRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
   const [localDirections, setLocalDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [weatherZones, setWeatherZones] = useState<WeatherZonePoint[]>([]);
   const [selectedWz, setSelectedWz] = useState<WeatherZonePoint | null>(null);
@@ -257,6 +258,49 @@ export default function MapPanel({
     });
   }, [isLoaded, showHeatmap, reports]);
 
+  // ── Neighbourhood safety overlay (always visible, neighbourhood-scale) ──────
+  // Combines user reports + geocoded crime news into a low-opacity colour layer.
+  // Transparent = no risk · Yellow = some incidents · Orange = several · Red = many
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return;
+    if (safetyOverlayRef.current) { safetyOverlayRef.current.setMap(null); safetyOverlayRef.current = null; }
+
+    const pts: google.maps.visualization.WeightedLocation[] = [];
+
+    // User reports — safety-relevant types only
+    for (const r of reports) {
+      const w = r.type === "theft" || r.type === "harassment" ? 5
+              : r.type === "danger" ? 3
+              : r.type === "dark_street" ? 2 : 0;
+      if (w > 0) pts.push({ location: new google.maps.LatLng(r.position.lat, r.position.lng), weight: w });
+    }
+
+    // Crime news with geocoded positions (higher weight — verified source)
+    for (const n of newsAlerts) {
+      if (n.category === "crime" && n.position) {
+        pts.push({ location: new google.maps.LatLng(n.position.lat, n.position.lng), weight: 8 });
+      }
+    }
+
+    if (pts.length === 0) return;
+
+    safetyOverlayRef.current = new google.maps.visualization.HeatmapLayer({
+      data: pts,
+      map: mapRef.current,
+      radius: 120,          // neighbourhood scale (~800m at zoom 14)
+      opacity: 0.55,
+      gradient: [
+        "rgba(0,0,0,0)",            // no data → transparent
+        "rgba(0,0,0,0)",
+        "rgba(253,224,71,0.25)",    // very light yellow
+        "rgba(250,204,21,0.38)",    // yellow
+        "rgba(245,158,11,0.48)",    // amber
+        "rgba(249,115,22,0.55)",    // orange
+        "rgba(239,68,68,0.62)",     // red
+      ],
+    });
+  }, [isLoaded, reports, newsAlerts]);
+
   const handleVote = async (vote: 1 | -1) => {
     if (!selectedReport) return;
     const rid = selectedReport.id;
@@ -268,14 +312,14 @@ export default function MapPanel({
 
   const showReports = zoom >= 14;
   const visibleReports = reports.filter((r) => showReports || isNearRoute(r.position, localDirections));
-  const newsMarkers = newsAlerts
+  // News markers only shown when a route is active (to highlight dangers along the path)
+  const newsMarkers = !routeActive ? [] : newsAlerts
     .filter((a) => a.category !== "general")
     .map((a, i) => ({
       ...a,
-      // Use geocoded position if available, otherwise fall back to approximate positions
       position: a.position || NEWS_POSITIONS[i % NEWS_POSITIONS.length],
     }))
-    .filter((a) => showReports || isNearRoute(a.position, localDirections));
+    .filter((a) => isNearRoute(a.position, localDirections));
 
   if (!isLoaded) {
     return (
