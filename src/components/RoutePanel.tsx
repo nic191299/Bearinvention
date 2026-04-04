@@ -5,12 +5,101 @@ import { LatLng, Report, NewsAlert, REPORT_CONFIG, SAFETY_TYPES } from "@/lib/ty
 import { getCityBounds } from "@/lib/cityData";
 import type { CityInfo } from "@/lib/cityData";
 
-interface NewsWarning {
-  title: string;
-  source: string;
-  category: NewsAlert["category"];
+// ─── Transit step model ────────────────────────────────────────────────────────
+interface TransitStep {
+  mode: "TRANSIT" | "WALKING";
+  duration: string;
+  distance?: string;
+  // walking only
+  instruction?: string;
+  // transit only
+  lineName?: string;
+  lineShortName?: string;
+  vehicleType?: string;
+  lineColor?: string;
+  lineTextColor?: string;
+  departureStop?: string;
+  arrivalStop?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  waitMin?: number;   // wait at transfer before this segment
+  numStops?: number;
 }
 
+function getVehicleIcon(type = ""): string {
+  switch (type.toUpperCase()) {
+    case "SUBWAY": case "METRO": return "directions_subway";
+    case "TRAM": return "tram";
+    case "RAIL": case "HEAVY_RAIL": case "COMMUTER_TRAIN": case "LONG_DISTANCE_TRAIN": return "directions_railway";
+    case "FERRY": return "directions_boat";
+    case "CABLE_CAR": case "GONDOLA": case "FUNICULAR": return "cable_car";
+    default: return "directions_bus";
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseTransitSteps(directions: any): TransitStep[] {
+  if (!directions?.routes?.[0]?.legs?.[0]) return [];
+  const steps = directions.routes[0].legs[0].steps as any[];
+  const result: TransitStep[] = [];
+  let lastTransitArrivalTs: number | null = null;
+
+  for (const step of steps) {
+    if (step.travel_mode === "TRANSIT") {
+      const t = step.transit;
+      let waitMin: number | undefined;
+
+      // Calculate wait since last transit arrival (across any walking step)
+      if (lastTransitArrivalTs && t?.departure_time?.value) {
+        const diffMin = Math.round((t.departure_time.value - lastTransitArrivalTs) / 60);
+        if (diffMin > 0 && diffMin < 60) waitMin = diffMin;
+      }
+
+      const rawColor = t?.line?.color;
+      const lineColor = rawColor ? (rawColor.startsWith("#") ? rawColor : `#${rawColor}`) : "#3b82f6";
+
+      result.push({
+        mode: "TRANSIT",
+        duration: step.duration?.text || "",
+        lineName: t?.line?.name || "",
+        lineShortName: t?.line?.short_name || t?.line?.name || "",
+        vehicleType: t?.line?.vehicle?.type || "BUS",
+        lineColor,
+        lineTextColor: t?.line?.text_color || "#ffffff",
+        departureStop: t?.departure_stop?.name || "",
+        arrivalStop: t?.arrival_stop?.name || "",
+        departureTime: t?.departure_time?.text || "",
+        arrivalTime: t?.arrival_time?.text || "",
+        numStops: t?.num_stops || 0,
+        waitMin,
+      });
+
+      lastTransitArrivalTs = t?.arrival_time?.value || null;
+    } else if (step.travel_mode === "WALKING") {
+      const txt = (step.instructions || "").replace(/<[^>]*>/g, "").trim();
+      result.push({
+        mode: "WALKING",
+        duration: step.duration?.text || "",
+        distance: step.distance?.text || "",
+        instruction: txt.length > 60 ? txt.slice(0, 60) + "…" : txt,
+      });
+    }
+  }
+
+  return result;
+}
+
+// ─── News warning model ────────────────────────────────────────────────────────
+interface NewsWarning { title: string; source: string; }
+
+const CRIME_KEYWORDS = ["borseggio","furto","rapina","scippo","aggressione","violenza","stupro","molestie","accoltellamento","rissa","spaccio"];
+function isNewsDangerous(n: NewsAlert): boolean {
+  if (n.category === "crime") return true;
+  const l = n.title.toLowerCase();
+  return CRIME_KEYWORDS.some(k => l.includes(k));
+}
+
+// ─── Props ─────────────────────────────────────────────────────────────────────
 interface RoutePanelProps {
   origin: LatLng | null;
   destination: LatLng | null;
@@ -27,52 +116,29 @@ interface RoutePanelProps {
   city?: CityInfo | null;
   reports?: Report[];
   newsAlerts?: NewsAlert[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  directions?: any;
 }
 
-const NEWS_CATEGORY_LABEL: Record<string, string> = {
-  crime: "Episodio segnalato nelle notizie",
-  road_closure: "Chiusura strada segnalata",
-  strike: "Sciopero in zona",
-  event: "Evento in zona",
-};
-
-const NEWS_CRIME_KEYWORDS = [
-  "borseggio", "furto", "rapina", "scippo", "aggressione",
-  "violenza", "stupro", "molestie", "accoltellamento", "rissa", "spaccio",
-];
-
-function isNewsDangerous(alert: NewsAlert): boolean {
-  if (alert.category === "crime") return true;
-  const lower = alert.title.toLowerCase();
-  return NEWS_CRIME_KEYWORDS.some(k => lower.includes(k));
-}
-
+// ─── Component ─────────────────────────────────────────────────────────────────
 export default function RoutePanel({
-  originText,
-  destinationText,
-  mode,
-  routeInfo,
-  onOriginSelect,
-  onDestinationSelect,
-  onModeChange,
-  onUseMyLocation,
-  onClear,
-  apiLoaded,
-  city,
-  reports = [],
-  newsAlerts = [],
+  originText, destinationText, mode, routeInfo,
+  onOriginSelect, onDestinationSelect, onModeChange,
+  onUseMyLocation, onClear,
+  apiLoaded, city, reports = [], newsAlerts = [], directions,
 }: RoutePanelProps) {
-  const destRef = useRef<HTMLInputElement>(null);
+  const destRef        = useRef<HTMLInputElement>(null);
   const originInputRef = useRef<HTMLInputElement>(null);
+  const originPosRef   = useRef<LatLng | null>(null);
+  const destPosRef     = useRef<LatLng | null>(null);
+
   const [editOrigin, setEditOrigin] = useState(false);
   const [reportWarnings, setReportWarnings] = useState<{ type: string; label: string; color: string; count: number }[]>([]);
   const [newsWarnings, setNewsWarnings] = useState<NewsWarning[]>([]);
+  const [transitSteps, setTransitSteps] = useState<TransitStep[]>([]);
+  const [showItinerary, setShowItinerary] = useState(false);
 
-  // Refs to track current positions
-  const originRef = useRef<LatLng | null>(null);
-  const destPosRef = useRef<LatLng | null>(null);
-
-  // Autocomplete setup
+  // ── Autocomplete ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!apiLoaded || !window.google?.maps?.places) return;
     const b = city ? getCityBounds(city) : { lat1: 41.79, lng1: 12.35, lat2: 41.99, lng2: 12.65 };
@@ -82,221 +148,311 @@ export default function RoutePanel({
     if (destRef.current) {
       const ac = new google.maps.places.Autocomplete(destRef.current, opts);
       ac.addListener("place_changed", () => {
-        const place = ac.getPlace();
-        if (place.geometry?.location)
-          handleDestSelect(
-            { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-            place.name || place.formatted_address || ""
-          );
+        const p = ac.getPlace();
+        if (p.geometry?.location) handleDestSelect({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.name || p.formatted_address || "");
       });
     }
     if (originInputRef.current) {
       const ac = new google.maps.places.Autocomplete(originInputRef.current, opts);
       ac.addListener("place_changed", () => {
-        const place = ac.getPlace();
-        if (place.geometry?.location) {
-          handleOriginSelect(
-            { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-            place.name || place.formatted_address || ""
-          );
-          setEditOrigin(false);
-        }
+        const p = ac.getPlace();
+        if (p.geometry?.location) { handleOriginSelect({ lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }, p.name || p.formatted_address || ""); setEditOrigin(false); }
       });
     }
   }, [apiLoaded, editOrigin, city]);
 
-  // Safety analysis: user reports + news
+  // ── Safety analysis ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!routeInfo) { setReportWarnings([]); setNewsWarnings([]); return; }
-    const originPos = originRef.current;
-    const destPos = destPosRef.current;
-    if (!originPos || !destPos) { setReportWarnings([]); setNewsWarnings([]); return; }
+    const o = originPosRef.current;
+    const d = destPosRef.current;
+    if (!o || !d) return;
 
-    const pad = 0.012; // ~1.3km padding around route bbox
-    const minLat = Math.min(originPos.lat, destPos.lat) - pad;
-    const maxLat = Math.max(originPos.lat, destPos.lat) + pad;
-    const minLng = Math.min(originPos.lng, destPos.lng) - pad;
-    const maxLng = Math.max(originPos.lng, destPos.lng) + pad;
+    const pad = 0.012;
+    const minLat = Math.min(o.lat, d.lat) - pad, maxLat = Math.max(o.lat, d.lat) + pad;
+    const minLng = Math.min(o.lng, d.lng) - pad, maxLng = Math.max(o.lng, d.lng) + pad;
+    const inBox = (p: LatLng) => p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng;
 
-    const inBox = (pos: LatLng) =>
-      pos.lat >= minLat && pos.lat <= maxLat && pos.lng >= minLng && pos.lng <= maxLng;
-
-    // ── User reports ──────────────────────────────────────────
-    const near = reports.filter(r => inBox(r.position));
     const counts: Record<string, number> = {};
-    for (const r of near) counts[r.type] = (counts[r.type] || 0) + 1;
+    for (const r of reports.filter(r => inBox(r.position))) counts[r.type] = (counts[r.type] || 0) + 1;
     const rw = Object.entries(counts).map(([type, count]) => ({
-      type,
+      type, count,
       label: REPORT_CONFIG[type as keyof typeof REPORT_CONFIG]?.label || type,
       color: REPORT_CONFIG[type as keyof typeof REPORT_CONFIG]?.color || "#6b7280",
-      count,
     }));
     rw.sort((a, b) => (SAFETY_TYPES.includes(a.type as never) ? -1 : 1) - (SAFETY_TYPES.includes(b.type as never) ? -1 : 1));
     setReportWarnings(rw);
 
-    // ── News-based dangers ────────────────────────────────────
-    // 1. Geocoded news with real position in route bbox
-    const geocodedDangers = newsAlerts
-      .filter(n => isNewsDangerous(n) && n.position && inBox(n.position))
-      .map(n => ({
-        title: n.title.length > 70 ? n.title.slice(0, 70) + "…" : n.title,
-        source: n.source,
-        category: n.category,
-      }));
-
-    // 2. Non-geocoded crime news: treat as city-wide warning (show max 2)
-    const nonGeocodedDangers = newsAlerts
-      .filter(n => isNewsDangerous(n) && !n.position)
-      .slice(0, 2)
-      .map(n => ({
-        title: n.title.length > 70 ? n.title.slice(0, 70) + "…" : n.title,
-        source: n.source,
-        category: n.category,
-      }));
-
-    const allNews = [...geocodedDangers, ...nonGeocodedDangers].slice(0, 4);
-    setNewsWarnings(allNews);
+    const geocoded = newsAlerts.filter(n => isNewsDangerous(n) && n.position && inBox(n.position));
+    const nonGeo   = newsAlerts.filter(n => isNewsDangerous(n) && !n.position).slice(0, 2);
+    setNewsWarnings([...geocoded, ...nonGeo].slice(0, 4).map(n => ({
+      title: n.title.length > 72 ? n.title.slice(0, 72) + "…" : n.title,
+      source: n.source,
+    })));
   }, [routeInfo, reports, newsAlerts]);
 
-  const handleOriginSelect = (pos: LatLng, text: string) => {
-    originRef.current = pos;
-    onOriginSelect(pos, text);
-  };
-  const handleDestSelect = (pos: LatLng, text: string) => {
-    destPosRef.current = pos;
-    onDestinationSelect(pos, text);
-  };
+  // ── Transit steps ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!directions || mode !== "TRANSIT") { setTransitSteps([]); return; }
+    setTransitSteps(parseTransitSteps(directions));
+  }, [directions, mode]);
 
-  const hasAnySafety = SAFETY_TYPES.some(t => reportWarnings.find(w => w.type === t));
-  const isRouteSafe = reportWarnings.length === 0 && newsWarnings.length === 0;
-  const dangerLevel = newsWarnings.length > 0 || hasAnySafety ? "high" : reportWarnings.length > 0 ? "medium" : "safe";
+  const handleOriginSelect = (pos: LatLng, text: string) => { originPosRef.current = pos; onOriginSelect(pos, text); };
+  const handleDestSelect   = (pos: LatLng, text: string) => { destPosRef.current = pos; onDestinationSelect(pos, text); };
+
+  const hasAnySafety  = SAFETY_TYPES.some(t => reportWarnings.find(w => w.type === t));
+  const isRouteSafe   = reportWarnings.length === 0 && newsWarnings.length === 0;
+  const dangerLevel   = newsWarnings.length > 0 || hasAnySafety ? "high" : reportWarnings.length > 0 ? "medium" : "safe";
+  const hasTransit    = transitSteps.some(s => s.mode === "TRANSIT");
 
   return (
-    <div className="glass rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+    <div className="glass rounded-3xl shadow-xl border border-white/40 overflow-hidden">
+      {/* ── Inputs ──────────────────────────────────────────────────────────── */}
       <div className="p-3 space-y-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-blue-200" />
-            <div className="w-0.5 h-5 bg-gray-200" />
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-red-200" />
+          {/* Dot connector */}
+          <div className="flex flex-col items-center gap-0.5 shrink-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-blue-200" />
+            <div className="w-px h-4 bg-gray-200" />
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-red-200" />
           </div>
           <div className="flex-1 space-y-1.5">
             {editOrigin ? (
-              <input
-                ref={originInputRef}
-                type="text"
-                placeholder="Da dove parti?"
-                autoFocus
-                className="w-full px-3 py-2 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input ref={originInputRef} type="text" placeholder="Da dove parti?" autoFocus
+                className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             ) : (
-              <div
-                className="w-full px-3 py-2 bg-blue-50 rounded-xl text-sm text-blue-700 font-medium flex items-center justify-between cursor-pointer"
-                onClick={() => setEditOrigin(true)}
-              >
+              <div onClick={() => setEditOrigin(true)}
+                className="w-full px-3 py-2.5 bg-blue-50 rounded-2xl text-sm text-blue-700 font-medium flex items-center justify-between cursor-pointer">
                 <span className="flex items-center gap-1.5 truncate">
                   <span className="material-symbols-outlined text-[14px]">my_location</span>
                   {originText || "La mia posizione"}
                 </span>
-                <span
-                  className="material-symbols-outlined text-[14px] text-blue-400 hover:text-blue-600 shrink-0"
-                  onClick={(e) => { e.stopPropagation(); onUseMyLocation(); setEditOrigin(false); }}
-                >
+                <span className="material-symbols-outlined text-[14px] text-blue-400 shrink-0"
+                  onClick={e => { e.stopPropagation(); onUseMyLocation(); setEditOrigin(false); }}>
                   gps_fixed
                 </span>
               </div>
             )}
-            <input
-              ref={destRef}
-              type="text"
-              placeholder="Dove vai?"
+            <input ref={destRef} type="text" placeholder="Dove vuoi andare?"
               defaultValue={destinationText}
-              onChange={(e) => { if (!e.target.value) destPosRef.current = null; }}
-              className="w-full px-3 py-2 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-            />
+              onChange={e => { if (!e.target.value) destPosRef.current = null; }}
+              className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white" />
           </div>
         </div>
 
+        {/* Mode toggle */}
         <div className="flex gap-2">
-          <button
-            onClick={() => onModeChange("WALKING")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${mode === "WALKING" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
-          >
-            <span className="material-symbols-outlined text-[16px]">directions_walk</span>
-            A piedi
-          </button>
-          <button
-            onClick={() => onModeChange("TRANSIT")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${mode === "TRANSIT" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
-          >
-            <span className="material-symbols-outlined text-[16px]">directions_bus</span>
-            Mezzi
-          </button>
+          {(["WALKING", "TRANSIT"] as const).map(m => (
+            <button key={m} onClick={() => onModeChange(m)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
+                mode === m ? "bg-blue-600 text-white shadow-md" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              }`}>
+              <span className="material-symbols-outlined text-[15px]">
+                {m === "WALKING" ? "directions_walk" : "directions_bus"}
+              </span>
+              {m === "WALKING" ? "A piedi" : "Mezzi pubblici"}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* ── Route info ──────────────────────────────────────────────────────── */}
       {routeInfo && (
-        <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-2">
+        <div className="px-3 pb-3 space-y-2 border-t border-white/30 pt-2.5">
+          {/* Duration row */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-bold text-gray-800 flex items-center gap-1">
-                <span className="material-symbols-outlined text-blue-600 text-[16px]">schedule</span>
-                {routeInfo.duration}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
+                <span className="material-symbols-outlined text-blue-600 text-[15px]">schedule</span>
+                <span className="text-sm font-bold text-gray-800">{routeInfo.duration}</span>
+              </div>
               <span className="text-xs text-gray-400">{routeInfo.distance}</span>
             </div>
-            <button onClick={onClear} className="text-[11px] text-red-500 font-medium flex items-center gap-0.5">
-              <span className="material-symbols-outlined text-[12px]">close</span>
+            <button onClick={onClear}
+              className="flex items-center gap-0.5 px-2 py-1 rounded-xl text-[11px] text-red-500 hover:bg-red-50 font-semibold transition">
+              <span className="material-symbols-outlined text-[13px]">close</span>
               Annulla
             </button>
           </div>
 
-          {/* Safety summary */}
+          {/* ── Transit itinerary ──────────────────────────────────────────── */}
+          {hasTransit && (
+            <div>
+              {/* Line chips preview */}
+              <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                {transitSteps.map((step, i) => {
+                  if (step.mode === "WALKING") {
+                    return (
+                      <div key={i} className="flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-gray-400 text-[13px]">directions_walk</span>
+                        {i < transitSteps.length - 1 && <span className="material-symbols-outlined text-gray-300 text-[11px]">arrow_forward_ios</span>}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={i} className="flex items-center gap-0.5">
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-bold shadow-sm"
+                        style={{ backgroundColor: step.lineColor || "#3b82f6", color: step.lineTextColor || "#fff" }}>
+                        <span className="material-symbols-outlined text-[12px]">{getVehicleIcon(step.vehicleType)}</span>
+                        {step.lineShortName || step.lineName}
+                      </div>
+                      {i < transitSteps.length - 1 && <span className="material-symbols-outlined text-gray-300 text-[11px]">arrow_forward_ios</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Expand/collapse itinerary */}
+              <button onClick={() => setShowItinerary(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 rounded-2xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition">
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] text-blue-500">route</span>
+                  {showItinerary ? "Nascondi dettagli" : "Vedi itinerario dettagliato"}
+                </span>
+                <span className="material-symbols-outlined text-[16px] text-gray-400">
+                  {showItinerary ? "expand_less" : "expand_more"}
+                </span>
+              </button>
+
+              {/* Detailed steps */}
+              {showItinerary && (
+                <div className="mt-2 space-y-1.5">
+                  {transitSteps.map((step, i) => {
+                    if (step.mode === "WALKING") {
+                      return (
+                        <div key={i} className="flex items-center gap-2.5 px-3 py-2.5 bg-gray-50 rounded-2xl">
+                          <div className="w-8 h-8 rounded-xl bg-gray-200 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-gray-500 text-[16px]">directions_walk</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-gray-700">
+                              A piedi · {step.duration}{step.distance ? ` · ${step.distance}` : ""}
+                            </div>
+                            {step.instruction && (
+                              <div className="text-[10px] text-gray-400 truncate mt-0.5">{step.instruction}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                    // TRANSIT step
+                    return (
+                      <div key={i} className="rounded-2xl overflow-hidden border border-gray-100">
+                        {/* Wait badge */}
+                        {step.waitMin !== undefined && step.waitMin > 0 && (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border-b border-orange-100">
+                            <span className="material-symbols-outlined text-orange-400 text-[13px]">hourglass_top</span>
+                            <span className="text-[10px] font-semibold text-orange-600">
+                              Attesa al cambio: {step.waitMin} min
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-start gap-2.5 p-3" style={{ borderLeft: `4px solid ${step.lineColor || "#3b82f6"}` }}>
+                          {/* Vehicle icon */}
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+                            style={{ backgroundColor: step.lineColor || "#3b82f6" }}>
+                            <span className="material-symbols-outlined text-[17px]"
+                              style={{ color: step.lineTextColor || "#fff" }}>
+                              {getVehicleIcon(step.vehicleType)}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {/* Line + stops */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold" style={{ color: step.lineColor }}>
+                                {step.lineShortName || step.lineName}
+                              </span>
+                              {step.lineName && step.lineShortName && step.lineName !== step.lineShortName && (
+                                <span className="text-[10px] text-gray-400 truncate">{step.lineName}</span>
+                              )}
+                              <span className="text-[10px] text-gray-400">·</span>
+                              <span className="text-[10px] text-gray-500">{step.numStops} fermate</span>
+                              <span className="text-[10px] text-gray-400">·</span>
+                              <span className="text-[10px] text-gray-500">{step.duration}</span>
+                            </div>
+                            {/* Stops */}
+                            <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
+                              <span className="material-symbols-outlined text-[11px]">radio_button_unchecked</span>
+                              <span className="truncate">{step.departureStop}</span>
+                              <span className="material-symbols-outlined text-[10px]">arrow_forward</span>
+                              <span className="truncate">{step.arrivalStop}</span>
+                            </div>
+                            {/* Departure time */}
+                            {step.departureTime && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-lg">
+                                  <span className="material-symbols-outlined text-blue-500 text-[11px]">schedule</span>
+                                  <span className="text-[10px] font-bold text-blue-600">Parte {step.departureTime}</span>
+                                </div>
+                                {step.arrivalTime && (
+                                  <div className="flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded-lg">
+                                    <span className="material-symbols-outlined text-gray-400 text-[11px]">flag</span>
+                                    <span className="text-[10px] text-gray-500">Arriva {step.arrivalTime}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Safety ────────────────────────────────────────────────────── */}
           {isRouteSafe ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
-              <span className="material-symbols-outlined text-green-500 text-[18px]">verified_user</span>
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 rounded-2xl border border-green-100">
+              <div className="w-7 h-7 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-green-500 text-[16px]">verified_user</span>
+              </div>
               <span className="text-[11px] text-green-700 font-semibold">Nessuna segnalazione lungo il percorso</span>
             </div>
           ) : (
             <div className="space-y-1.5">
-              {/* Danger level header */}
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                dangerLevel === "high"
-                  ? "bg-red-50 border-red-200"
-                  : "bg-amber-50 border-amber-100"
+              {/* Danger header */}
+              <div className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl border ${
+                dangerLevel === "high" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-100"
               }`}>
-                <span className={`material-symbols-outlined text-[16px] ${dangerLevel === "high" ? "text-red-500" : "text-amber-500"}`}>
-                  {dangerLevel === "high" ? "dangerous" : "warning"}
-                </span>
+                <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                  dangerLevel === "high" ? "bg-red-100" : "bg-amber-100"
+                }`}>
+                  <span className={`material-symbols-outlined text-[16px] ${dangerLevel === "high" ? "text-red-500" : "text-amber-500"}`}>
+                    {dangerLevel === "high" ? "dangerous" : "warning"}
+                  </span>
+                </div>
                 <span className={`text-[11px] font-bold ${dangerLevel === "high" ? "text-red-700" : "text-amber-700"}`}>
                   {dangerLevel === "high"
-                    ? "Zona a rischio — valuta percorso alternativo"
+                    ? "Zona a rischio — considera percorso alternativo"
                     : `${reportWarnings.reduce((s, w) => s + w.count, 0)} segnalazioni lungo il percorso`}
                 </span>
               </div>
 
-              {/* News-based dangers */}
+              {/* News warnings */}
               {newsWarnings.map((nw, i) => (
-                <div key={i} className="flex items-start gap-2 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
-                  <span className="material-symbols-outlined text-red-500 text-[14px] mt-0.5 shrink-0">newspaper</span>
+                <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-red-50 rounded-2xl border border-red-100">
+                  <div className="w-7 h-7 bg-red-100 rounded-xl flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="material-symbols-outlined text-red-500 text-[14px]">newspaper</span>
+                  </div>
                   <div className="min-w-0">
-                    <div className="text-[9px] font-bold text-red-400 uppercase tracking-wide mb-0.5">
-                      {nw.source} — notizia recente
-                    </div>
-                    <div className="text-[10px] text-red-800 font-medium leading-snug">{nw.title}</div>
+                    <div className="text-[9px] font-bold text-red-400 uppercase tracking-wide">{nw.source}</div>
+                    <div className="text-[10px] text-red-800 font-medium leading-snug mt-0.5">{nw.title}</div>
                   </div>
                 </div>
               ))}
 
-              {/* User report warnings */}
-              {reportWarnings.slice(0, 3).map((w) => (
-                <div key={w.type} className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ backgroundColor: w.color + "12" }}>
-                  <span className="material-symbols-outlined text-[13px]" style={{ color: w.color }}>
-                    {REPORT_CONFIG[w.type as keyof typeof REPORT_CONFIG]?.icon || "info"}
-                  </span>
-                  <span className="text-[10px] font-medium" style={{ color: w.color }}>
-                    {w.count}× {w.label} — segnalazione utenti
-                    {SAFETY_TYPES.includes(w.type as never) ? " ⚠️" : ""}
+              {/* Report warnings */}
+              {reportWarnings.slice(0, 3).map(w => (
+                <div key={w.type} className="flex items-center gap-2.5 px-3 py-2 rounded-2xl" style={{ backgroundColor: w.color + "12" }}>
+                  <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: w.color + "25" }}>
+                    <span className="material-symbols-outlined text-[14px]" style={{ color: w.color }}>
+                      {REPORT_CONFIG[w.type as keyof typeof REPORT_CONFIG]?.icon || "info"}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-semibold" style={{ color: w.color }}>
+                    {w.count}× {w.label}{SAFETY_TYPES.includes(w.type as never) ? " ⚠️" : ""}
                   </span>
                 </div>
               ))}

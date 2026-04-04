@@ -41,12 +41,12 @@ export interface RouteWarning {
 }
 
 export const REPORT_CONFIG = {
-  road_closed: { label: "Strada chiusa", icon: "block", color: "#f97316" },
-  danger: { label: "Pericolo", icon: "warning", color: "#ef4444" },
-  slowdown: { label: "Rallentamento", icon: "speed", color: "#eab308" },
-  dark_street: { label: "Strada buia", icon: "dark_mode", color: "#6366f1" },
-  theft: { label: "Furto/Borseggio", icon: "local_police", color: "#dc2626" },
-  harassment: { label: "Molestie", icon: "report", color: "#9333ea" },
+  road_closed: { label: "Strada chiusa", icon: "do_not_enter", color: "#f97316" },
+  danger: { label: "Pericolo", icon: "dangerous", color: "#ef4444" },
+  slowdown: { label: "Rallentamento", icon: "timer", color: "#eab308" },
+  dark_street: { label: "Zona buia", icon: "nightlight", color: "#6366f1" },
+  theft: { label: "Furto/Scippo", icon: "policy", color: "#dc2626" },
+  harassment: { label: "Molestie", icon: "personal_injury", color: "#9333ea" },
 } as const;
 
 export const SAFETY_TYPES: ReportType[] = ["dark_street", "theft", "harassment"];

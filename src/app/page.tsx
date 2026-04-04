@@ -419,6 +419,7 @@ export default function Home() {
             city={city}
             reports={reports}
             newsAlerts={newsAlerts}
+            directions={directions}
           />
         )}
 

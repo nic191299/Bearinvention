@@ -171,7 +171,12 @@ export default function MapPanel({
         travelMode,
         provideRouteAlternatives: true,
         ...(travelMode === google.maps.TravelMode.TRANSIT
-          ? { transitOptions: { modes: [google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY, google.maps.TransitMode.TRAM] } }
+          ? {
+              transitOptions: {
+                modes: [google.maps.TransitMode.BUS, google.maps.TransitMode.SUBWAY, google.maps.TransitMode.TRAM, google.maps.TransitMode.RAIL],
+                departureTime: new Date(), // real-time next departure
+              },
+            }
           : {}),
       },
       (result, status) => {

@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { ReportType, REPORT_CONFIG } from "@/lib/types";
 
-const ITEMS: { type: ReportType; emoji: string; label: string }[] = [
-  { type: "road_closed",  emoji: "🚧", label: "Strada chiusa" },
-  { type: "danger",       emoji: "⚠️", label: "Pericolo" },
-  { type: "slowdown",     emoji: "🚦", label: "Rallentamento" },
-  { type: "dark_street",  emoji: "🌑", label: "Zona buia" },
-  { type: "theft",        emoji: "🎒", label: "Furto" },
-  { type: "harassment",   emoji: "🚫", label: "Molestie" },
+// Same Material Symbols icons used in the map controls
+const ITEMS: { type: ReportType }[] = [
+  { type: "road_closed" },
+  { type: "danger" },
+  { type: "slowdown" },
+  { type: "dark_street" },
+  { type: "theft" },
+  { type: "harassment" },
 ];
 
 interface ReportFABProps {
@@ -40,49 +41,45 @@ export default function ReportFAB({ onReport, onSOSOpen }: ReportFABProps) {
 
       {/* Backdrop */}
       {open && (
-        <div
-          className="fixed inset-0 z-[88] bg-black/40 animate-fade-in"
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 z-[88] bg-black/30 animate-fade-in" onClick={() => setOpen(false)} />
       )}
 
-      {/* Report grid popup */}
+      {/* Report grid */}
       {open && (
         <div
           className="fixed z-[89] animate-fade-in-up"
           style={{
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 92px)",
             left: "50%",
             transform: "translateX(-50%)",
-            width: "min(340px, 92vw)",
+            width: "min(320px, 90vw)",
           }}
         >
-          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
-            {/* Header */}
-            <div className="px-4 pt-4 pb-2">
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">
-                Cosa segnali?
-              </p>
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+            <div className="px-4 pt-3.5 pb-1 text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Cosa segnali?</span>
             </div>
-            {/* 3×2 grid */}
             <div className="grid grid-cols-3 gap-2 p-3">
-              {ITEMS.map((item) => {
-                const cfg = REPORT_CONFIG[item.type];
+              {ITEMS.map(({ type }) => {
+                const cfg = REPORT_CONFIG[type];
                 return (
                   <button
-                    key={item.type}
-                    onClick={() => handle(item.type)}
-                    className="flex flex-col items-center gap-2 py-3.5 px-1 rounded-2xl active:scale-90 transition-all"
-                    style={{ backgroundColor: cfg.color + "15" }}
+                    key={type}
+                    onClick={() => handle(type)}
+                    className="flex flex-col items-center gap-2 py-3.5 rounded-2xl active:scale-90 transition-all"
+                    style={{ backgroundColor: cfg.color + "12" }}
                   >
+                    {/* Rounded square tile — same style as map controls */}
                     <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-sm"
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-md"
                       style={{ backgroundColor: cfg.color }}
                     >
-                      {item.emoji}
+                      <span className="material-symbols-outlined text-white text-[22px]">
+                        {cfg.icon}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-bold text-gray-700 text-center leading-tight">
-                      {item.label}
+                    <span className="text-[10px] font-bold text-gray-700 text-center leading-tight px-1">
+                      {cfg.label}
                     </span>
                   </button>
                 );
@@ -95,46 +92,38 @@ export default function ReportFAB({ onReport, onSOSOpen }: ReportFABProps) {
       {/* SOS pill — bottom right */}
       <button
         onClick={onSOSOpen}
-        className="fixed z-[90] flex items-center gap-1.5 bg-red-600 text-white rounded-full shadow-2xl px-4 h-12 active:scale-90 transition-transform font-bold text-sm"
-        style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-          right: 16,
-        }}
+        className="fixed z-[90] flex items-center gap-1.5 bg-red-600 text-white rounded-2xl shadow-2xl px-4 h-12 active:scale-90 transition-transform font-bold text-sm"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)", right: 16 }}
       >
-        <span className="material-symbols-outlined text-[20px]">sos</span>
+        <span className="material-symbols-outlined text-[20px]">emergency</span>
         SOS
       </button>
 
       {/* Main FAB — center bottom */}
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="fixed z-[90] active:scale-90 transition-all"
+        onClick={() => setOpen(v => !v)}
+        className="fixed z-[90] active:scale-90"
         style={{
           bottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
           left: "50%",
           transform: "translateX(-50%)",
-          width: 64,
-          height: 64,
-          borderRadius: "50%",
-          background: open
-            ? "#374151"
-            : "linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
-          boxShadow: open
-            ? "0 8px 32px rgba(55,65,81,0.4)"
-            : "0 8px 32px rgba(239,68,68,0.45)",
-          transition: "background 0.2s, box-shadow 0.2s",
+          width: 60,
+          height: 60,
+          borderRadius: 20,           // rounded-2xl square tile, not circle
+          background: open ? "#1e293b" : "linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
+          boxShadow: open ? "0 8px 32px rgba(30,41,59,.45)" : "0 8px 32px rgba(239,68,68,.45)",
+          transition: "background .2s, box-shadow .2s, border-radius .15s",
         }}
       >
-        {/* Inner icon rotates */}
         <span
-          className="material-symbols-outlined text-white text-[28px] select-none"
+          className="material-symbols-outlined text-white text-[26px] select-none"
           style={{
             display: "block",
-            transition: "transform 0.25s cubic-bezier(.34,1.56,.64,1)",
+            transition: "transform .25s cubic-bezier(.34,1.56,.64,1)",
             transform: open ? "rotate(45deg)" : "rotate(0deg)",
           }}
         >
-          {open ? "close" : "add_alert"}
+          add_alert
         </span>
       </button>
     </>
