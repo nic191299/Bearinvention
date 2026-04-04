@@ -13,6 +13,7 @@ import { createAuthClient } from "@/lib/auth";
 import type { UserProfile } from "@/lib/auth";
 import { parseTransitSteps } from "@/lib/transitSteps";
 import RoutePanel from "@/components/RoutePanel";
+import RouteBottomSheet from "@/components/RouteBottomSheet";
 import WeatherBar from "@/components/WeatherBar";
 import ReportFAB from "@/components/ReportFAB";
 import NavHUD from "@/components/NavHUD";
@@ -78,6 +79,7 @@ export default function Home() {
   // Transit steps for NavHUD
   const [transitSteps, setTransitSteps] = useState<ReturnType<typeof parseTransitSteps>>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [showRouteSheet, setShowRouteSheet] = useState(false);
 
   // News
   const [newsAlerts, setNewsAlerts] = useState<NewsAlert[]>([]);
@@ -296,7 +298,7 @@ export default function Home() {
   const handleClear = useCallback(() => {
     setOrigin(null); setDestination(null); setOriginText(""); setDestText("");
     setRouteActive(false); setRouteInfo(null); setDirections(null); setRouteOpen(false);
-    setSelectedRouteIndex(0);
+    setSelectedRouteIndex(0); setShowRouteSheet(false);
   }, []);
 
   // ── Render guards ─────────────────────────────────────────
@@ -359,6 +361,7 @@ export default function Home() {
         userPosition={position}
         userWatching={watching}
         cityCenter={cityCenter}
+        cityName={city?.name}
         reports={reports}
         newsAlerts={newsAlerts}
         showRadar={showRadar}
@@ -442,7 +445,7 @@ export default function Home() {
             mode={mode}
             routeInfo={routeInfo}
             onOriginSelect={(pos, text) => { setOrigin(pos); setOriginText(text); setRouteActive(!!destination); }}
-            onDestinationSelect={(pos, text) => { setDestination(pos); setDestText(text); setRouteActive(true); setRouteOpen(false); }}
+            onDestinationSelect={(pos, text) => { setDestination(pos); setDestText(text); setRouteActive(true); setRouteOpen(false); setShowRouteSheet(true); }}
             onModeChange={setMode}
             onUseMyLocation={() => { setOrigin(position); setOriginText("La mia posizione"); }}
             onClear={handleClear}
@@ -511,6 +514,22 @@ export default function Home() {
         onReport={handleReport}
         onSOSOpen={() => setShowSOS(true)}
       />
+
+      {/* Waze-style full-screen route picker */}
+      {showRouteSheet && directions && (
+        <RouteBottomSheet
+          directions={directions}
+          selectedRouteIndex={selectedRouteIndex}
+          onRouteSelect={handleRouteSelect}
+          onConfirm={() => setShowRouteSheet(false)}
+          onDismiss={handleClear}
+          reports={reports}
+          newsAlerts={newsAlerts}
+          originText={originText || "La mia posizione"}
+          destinationText={destText}
+          mode={mode}
+        />
+      )}
     </div>
   );
 }

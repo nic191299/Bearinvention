@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleMap,
   useJsApiLoader,
@@ -15,6 +15,7 @@ import { fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
 import { WeatherZonePoint, fetchWeatherZones } from "@/lib/weatherZones";
 import { computeConfidence } from "@/lib/geo";
 import { getSessionId } from "@/lib/session";
+import { getNeighbourhoods, Neighbourhood } from "@/lib/neighbourhoods";
 
 const libraries: ("places" | "visualization")[] = ["places", "visualization"];
 
@@ -29,6 +30,27 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function neighbourhoodDanger(n: Neighbourhood, reports: Report[], newsAlerts: NewsAlert[]): { fillColor: string; fillOpacity: number; strokeColor: string } {
+  let score = 0;
+  const thresh = n.radius * 1.4;
+  for (const r of reports) {
+    if (haversine(r.position.lat, r.position.lng, n.lat, n.lng) < thresh) {
+      score += r.type === "theft" || r.type === "harassment" ? 5
+             : r.type === "danger" ? 3
+             : r.type === "dark_street" ? 2 : 1;
+    }
+  }
+  for (const news of newsAlerts) {
+    if (news.category === "crime" && news.position) {
+      if (haversine(news.position.lat, news.position.lng, n.lat, n.lng) < thresh) score += 8;
+    }
+  }
+  if (score === 0)  return { fillColor: "#10b981", fillOpacity: 0.06,  strokeColor: "#10b981" };
+  if (score < 6)   return { fillColor: "#facc15", fillOpacity: 0.15,  strokeColor: "#facc15" };
+  if (score < 15)  return { fillColor: "#f97316", fillOpacity: 0.22,  strokeColor: "#f97316" };
+  return                   { fillColor: "#ef4444", fillOpacity: 0.28,  strokeColor: "#ef4444" };
 }
 
 function isNearRoute(point: LatLng, result: google.maps.DirectionsResult | null, threshold = 200): boolean {
@@ -75,6 +97,7 @@ interface MapPanelProps {
   userPosition: LatLng;
   userWatching?: boolean;
   cityCenter?: LatLng;
+  cityName?: string;
   reports: Report[];
   newsAlerts: NewsAlert[];
   showRadar: boolean;
@@ -97,6 +120,7 @@ export default function MapPanel({
   userPosition,
   userWatching = false,
   cityCenter,
+  cityName,
   reports,
   newsAlerts,
   showRadar,
@@ -128,6 +152,12 @@ export default function MapPanel({
   const [zoom, setZoom] = useState(14);
 
   const center = cityCenter || userPosition;
+
+  // Neighbourhood circles — derived from city + danger data
+  const neighbourhoods = useMemo(
+    () => (routeActive && cityName ? getNeighbourhoods(cityName) : []),
+    [routeActive, cityName]
+  );
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -482,6 +512,27 @@ export default function MapPanel({
           </div>
         </InfoWindow>
       )}
+
+      {/* Neighbourhood safety circles — coloured by danger score, shown when route is active */}
+      {neighbourhoods.map((n, i) => {
+        const { fillColor, fillOpacity, strokeColor } = neighbourhoodDanger(n, reports, newsAlerts);
+        return (
+          <Circle
+            key={`nh-${i}`}
+            center={{ lat: n.lat, lng: n.lng }}
+            radius={n.radius}
+            options={{
+              fillColor,
+              fillOpacity,
+              strokeColor,
+              strokeOpacity: fillOpacity * 1.8,
+              strokeWeight: 1.5,
+              clickable: false,
+              zIndex: 2,
+            }}
+          />
+        );
+      })}
 
       {/* Directions — render all alternatives, highlight selected */}
       {localDirections && localDirections.routes.map((_, routeIdx) => {
