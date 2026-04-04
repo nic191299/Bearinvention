@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LatLng, ReportType, REPORT_CONFIG } from "@/lib/types";
+import { LatLng, ReportType } from "@/lib/types";
 
 interface ReportIconsProps {
   userPosition: LatLng;
@@ -27,14 +27,13 @@ export default function ReportIcons({ onReport }: ReportIconsProps) {
   const handle = (type: ReportType, label: string) => {
     onReport(type);
     setSent(label);
-    setTimeout(() => setSent(null), 1500);
+    setTimeout(() => setSent(null), 2000);
   };
 
   const items = safetyMode ? SAFETY_ITEMS : MOBILITY_ITEMS;
 
   return (
     <div className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-2.5">
-      {/* Toggle mobilità / sicurezza */}
       <button
         onClick={() => setSafetyMode(!safetyMode)}
         className={`w-10 h-10 md:w-11 md:h-11 rounded-full shadow-lg flex items-center justify-center transition-all border-2 border-white active:scale-90 ${
@@ -57,9 +56,7 @@ export default function ReportIcons({ onReport }: ReportIconsProps) {
           style={{ backgroundColor: item.color }}
           title={item.label}
         >
-          <span className="material-symbols-outlined text-white text-[22px] md:text-[26px]">
-            {item.icon}
-          </span>
+          <span className="material-symbols-outlined text-white text-[22px] md:text-[26px]">{item.icon}</span>
           <span className="hidden md:group-hover:flex absolute left-full ml-2 bg-gray-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
             {item.label}
           </span>
@@ -69,7 +66,7 @@ export default function ReportIcons({ onReport }: ReportIconsProps) {
       {sent && (
         <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-green-500 text-white rounded-xl shadow-xl px-3 py-2 flex items-center gap-1.5 whitespace-nowrap animate-fade-in-up text-sm font-medium">
           <span className="material-symbols-outlined text-[16px]">check_circle</span>
-          {sent}
+          Segnalato: {sent}
         </div>
       )}
     </div>

@@ -13,6 +13,7 @@
   "description": "",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.49.4",
     "@react-google-maps/api": "^2.20.8",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^25.5.0",

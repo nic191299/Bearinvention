@@ -10,7 +10,12 @@ export interface Report {
   type: ReportType;
   position: LatLng;
   timestamp: Date;
-  upvotes: number;
+  confirms: number;
+  denials: number;
+  expiresAt: Date;
+  sessionId?: string;
+  // legacy compat
+  upvotes?: number;
 }
 
 export interface NewsAlert {
@@ -25,6 +30,13 @@ export interface NewsAlert {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface RouteWarning {
+  type: ReportType;
+  label: string;
+  color: string;
+  count: number;
 }
 
 export const REPORT_CONFIG = {

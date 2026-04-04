@@ -13,8 +13,10 @@ import {
 import { LatLng, Report, NewsAlert, REPORT_CONFIG } from "@/lib/types";
 import { fetchRadarFrames, getRadarTileUrl } from "@/lib/weather";
 import { WeatherZonePoint, fetchWeatherZones } from "@/lib/weatherZones";
+import { computeConfidence } from "@/lib/geo";
+import { getSessionId } from "@/lib/session";
 
-const libraries: ("places")[] = ["places"];
+const libraries: ("places" | "visualization")[] = ["places", "visualization"];
 
 const MAP_STYLES = [
   { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -43,23 +45,12 @@ function isNearRoute(point: LatLng, result: google.maps.DirectionsResult | null,
   return false;
 }
 
-// Posizioni note di Roma per piazzare i marker delle news
-const ROME_POSITIONS: LatLng[] = [
-  { lat: 41.8986, lng: 12.4769 },  // Largo Argentina
-  { lat: 41.9028, lng: 12.4964 },  // Piazza Venezia
-  { lat: 41.8902, lng: 12.4922 },  // Colosseo
-  { lat: 41.9009, lng: 12.4833 },  // Trastevere
-  { lat: 41.9106, lng: 12.5017 },  // Termini
-  { lat: 41.9100, lng: 12.4768 },  // Piazza del Popolo
-  { lat: 41.9022, lng: 12.4539 },  // Stazione Trastevere
-  { lat: 41.9010, lng: 12.5024 },  // San Giovanni
-  { lat: 41.9073, lng: 12.5175 },  // Tiburtina
-  { lat: 41.8578, lng: 12.5194 },  // EUR
-  { lat: 41.8827, lng: 12.4707 },  // Ostiense
-  { lat: 41.9186, lng: 12.4614 },  // Prati / Vaticano
-  { lat: 41.8674, lng: 12.4711 },  // Garbatella
-  { lat: 41.9242, lng: 12.4952 },  // Parioli
-  { lat: 41.8719, lng: 12.5674 },  // Cinecittà
+const NEWS_POSITIONS: LatLng[] = [
+  { lat: 41.8986, lng: 12.4769 }, { lat: 41.9028, lng: 12.4964 }, { lat: 41.8902, lng: 12.4922 },
+  { lat: 41.9009, lng: 12.4833 }, { lat: 41.9106, lng: 12.5017 }, { lat: 41.9100, lng: 12.4768 },
+  { lat: 41.9022, lng: 12.4539 }, { lat: 41.9010, lng: 12.5024 }, { lat: 41.9073, lng: 12.5175 },
+  { lat: 41.8578, lng: 12.5194 }, { lat: 41.8827, lng: 12.4707 }, { lat: 41.9186, lng: 12.4614 },
+  { lat: 41.8674, lng: 12.4711 }, { lat: 41.9242, lng: 12.4952 }, { lat: 41.8719, lng: 12.5674 },
 ];
 
 const NEWS_MARKER_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
@@ -73,46 +64,64 @@ const NEWS_MARKER_CONFIG: Record<string, { icon: string; color: string; label: s
 interface MapPanelProps {
   apiKey: string;
   userPosition: LatLng;
+  cityCenter?: LatLng;
   reports: Report[];
   newsAlerts: NewsAlert[];
   showRadar: boolean;
   showTraffic: boolean;
+  showHeatmap: boolean;
   directions: google.maps.DirectionsResult | null;
   onDirectionsChange: (result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => void;
   routeOrigin: LatLng | null;
   routeDestination: LatLng | null;
   routeMode: string;
   routeActive: boolean;
+  onVote: (reportId: string, vote: 1 | -1) => void;
 }
 
 export default function MapPanel({
   apiKey,
   userPosition,
+  cityCenter,
   reports,
   newsAlerts,
   showRadar,
   showTraffic,
+  showHeatmap,
   directions,
   onDirectionsChange,
   routeOrigin,
   routeDestination,
   routeMode,
   routeActive,
+  onVote,
 }: MapPanelProps) {
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries });
   const mapRef = useRef<google.maps.Map | null>(null);
   const radarRef = useRef<google.maps.ImageMapType | null>(null);
+  const heatmapRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
   const [localDirections, setLocalDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [weatherZones, setWeatherZones] = useState<WeatherZonePoint[]>([]);
   const [selectedWz, setSelectedWz] = useState<WeatherZonePoint | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [selectedNews, setSelectedNews] = useState<(NewsAlert & { position: LatLng }) | null>(null);
+  const [votedReports, setVotedReports] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(14);
+
+  const center = cityCenter || userPosition;
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     map.addListener("zoom_changed", () => setZoom(map.getZoom() || 14));
   }, []);
+
+  // Pan to city center on change
+  useEffect(() => {
+    if (mapRef.current && cityCenter) {
+      mapRef.current.panTo(cityCenter);
+      mapRef.current.setZoom(14);
+    }
+  }, [cityCenter?.lat, cityCenter?.lng]);
 
   // Weather zones
   useEffect(() => {
@@ -154,9 +163,9 @@ export default function MapPanel({
     );
   }, [isLoaded, routeOrigin, routeDestination, routeMode, routeActive, onDirectionsChange]);
 
-  // Pan once
+  // Pan once on mount
   useEffect(() => {
-    if (mapRef.current) mapRef.current.panTo(userPosition);
+    if (mapRef.current) mapRef.current.panTo(center);
   }, []);
 
   // Radar overlay
@@ -165,7 +174,6 @@ export default function MapPanel({
     const map = mapRef.current;
     if (radarRef.current) { map.overlayMapTypes.clear(); radarRef.current = null; }
     if (!showRadar) return;
-
     fetchRadarFrames().then((frames) => {
       if (!frames || !mapRef.current) return;
       const all = [...frames.past, ...frames.nowcast];
@@ -187,16 +195,53 @@ export default function MapPanel({
     });
   }, [isLoaded, showRadar]);
 
-  const showReports = zoom >= 15;
-  const visibleReports = reports.filter((r) => showReports || isNearRoute(r.position, localDirections));
+  // Heatmap overlay (safety density)
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return;
+    if (heatmapRef.current) {
+      heatmapRef.current.setMap(null);
+      heatmapRef.current = null;
+    }
+    if (!showHeatmap || reports.length === 0) return;
 
-  // News markers: only road_closure, strike, event, transport
+    const data = reports.map((r) => {
+      const weight =
+        r.type === "theft" ? 4 :
+        r.type === "harassment" ? 4 :
+        r.type === "danger" ? 3 :
+        r.type === "dark_street" ? 2 : 1;
+      return { location: new google.maps.LatLng(r.position.lat, r.position.lng), weight };
+    });
+
+    heatmapRef.current = new google.maps.visualization.HeatmapLayer({
+      data,
+      map: mapRef.current,
+      radius: 60,
+      opacity: 0.75,
+      gradient: [
+        "rgba(0,255,100,0)",
+        "rgba(0,255,100,0.5)",
+        "rgba(255,255,0,0.7)",
+        "rgba(255,130,0,0.8)",
+        "rgba(255,0,0,0.9)",
+      ],
+    });
+  }, [isLoaded, showHeatmap, reports]);
+
+  const handleVote = async (vote: 1 | -1) => {
+    if (!selectedReport) return;
+    const rid = selectedReport.id;
+    if (votedReports.has(rid)) return;
+    setVotedReports((prev) => { const n = new Set(Array.from(prev)); n.add(rid); return n; });
+    onVote(rid, vote);
+    setSelectedReport(null);
+  };
+
+  const showReports = zoom >= 14;
+  const visibleReports = reports.filter((r) => showReports || isNearRoute(r.position, localDirections));
   const newsMarkers = newsAlerts
     .filter((a) => a.category !== "general")
-    .map((a, i) => ({
-      ...a,
-      position: ROME_POSITIONS[i % ROME_POSITIONS.length],
-    }))
+    .map((a, i) => ({ ...a, position: NEWS_POSITIONS[i % NEWS_POSITIONS.length] }))
     .filter((a) => showReports || isNearRoute(a.position, localDirections));
 
   if (!isLoaded) {
@@ -210,7 +255,7 @@ export default function MapPanel({
   return (
     <GoogleMap
       mapContainerClassName="w-full h-full"
-      center={userPosition}
+      center={center}
       zoom={14}
       onLoad={onLoad}
       onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); }}
@@ -227,101 +272,116 @@ export default function MapPanel({
 
       {/* Weather zones */}
       {showRadar && weatherZones.map((wz, i) => (
-        <Circle
-          key={`wz${i}`}
-          center={wz.position}
-          radius={700}
+        <Circle key={`wz${i}`} center={wz.position} radius={700}
           options={{ fillColor: wz.color, fillOpacity: 0.25, strokeColor: wz.color, strokeOpacity: 0.6, strokeWeight: 2, clickable: true }}
-          onClick={() => { setSelectedWz(wz); setSelectedReport(null); }}
-        />
+          onClick={() => { setSelectedWz(wz); setSelectedReport(null); }} />
       ))}
       {showRadar && weatherZones.map((wz, i) => (
-        <Marker
-          key={`wzl${i}`}
-          position={wz.position}
+        <Marker key={`wzl${i}`} position={wz.position}
           icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 0 }}
           label={{ text: `${Math.round(wz.temperature)}°`, color: wz.precipitation > 0 ? "#2563eb" : "#374151", fontSize: "11px", fontWeight: "bold" }}
-          clickable={false}
-        />
+          clickable={false} />
       ))}
       {selectedWz && (
         <InfoWindow position={selectedWz.position} onCloseClick={() => setSelectedWz(null)}>
           <div style={{ padding: 6, maxWidth: 200 }}>
             <div style={{ fontWeight: 700, fontSize: 13 }}>{selectedWz.name}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, margin: "4px 0" }}>{Math.round(selectedWz.temperature)}°C <span style={{ fontSize: 12, fontWeight: 400, color: "#64748b" }}>{selectedWz.label}</span></div>
+            <div style={{ fontSize: 20, fontWeight: 700, margin: "4px 0" }}>
+              {Math.round(selectedWz.temperature)}°C <span style={{ fontSize: 12, fontWeight: 400, color: "#64748b" }}>{selectedWz.label}</span>
+            </div>
             {selectedWz.precipitation > 0 && <div style={{ fontSize: 11, color: "#2563eb" }}>Precipitazioni: {selectedWz.precipitation}mm</div>}
             <div style={{ fontSize: 11, color: "#64748b" }}>Vento: {Math.round(selectedWz.windSpeed)} km/h</div>
-            {selectedWz.precipitation > 0.5 && <div style={{ marginTop: 4, padding: "3px 8px", background: "#eff6ff", borderRadius: 6, fontSize: 11, color: "#2563eb", fontWeight: 600 }}>Piove qui! Prendi la metro</div>}
           </div>
         </InfoWindow>
       )}
 
-      {/* User */}
+      {/* User marker */}
       <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#2563eb", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} zIndex={100} />
       <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 25, fillColor: "#2563eb", fillOpacity: 0.15, strokeColor: "#2563eb", strokeWeight: 1, strokeOpacity: 0.3 }} zIndex={99} clickable={false} />
 
       {/* Reports */}
       {visibleReports.map((r) => {
         const cfg = REPORT_CONFIG[r.type];
+        const conf = computeConfidence(r.confirms, r.denials);
+        const opacity = Math.min(0.95, 0.5 + conf * 0.2);
+        const alreadyVoted = votedReports.has(r.id);
         return (
-          <Marker
-            key={r.id}
-            position={r.position}
-            onClick={() => { setSelectedReport(r); setSelectedWz(null); }}
-            icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: cfg.color, fillOpacity: 0.9, strokeColor: "#fff", strokeWeight: 2 }}
+          <Marker key={r.id} position={r.position}
+            onClick={() => { setSelectedReport(r); setSelectedWz(null); setSelectedNews(null); }}
+            icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: cfg.color, fillOpacity: opacity, strokeColor: "#fff", strokeWeight: 2 }}
             zIndex={50}
+            opacity={alreadyVoted ? 0.6 : 1}
           />
         );
       })}
-      {selectedReport && (
-        <InfoWindow position={selectedReport.position} onCloseClick={() => setSelectedReport(null)}>
-          <div style={{ padding: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, color: "#fff", backgroundColor: REPORT_CONFIG[selectedReport.type].color }}>
-                {REPORT_CONFIG[selectedReport.type].label}
-              </span>
-              <span style={{ fontSize: 10, color: "#94a3b8" }}>{Math.round((Date.now() - selectedReport.timestamp.getTime()) / 60000)} min fa</span>
+      {selectedReport && (() => {
+        const cfg = REPORT_CONFIG[selectedReport.type];
+        const conf = computeConfidence(selectedReport.confirms, selectedReport.denials);
+        const ageMin = Math.round((Date.now() - selectedReport.timestamp.getTime()) / 60000);
+        const alreadyVoted = votedReports.has(selectedReport.id);
+        return (
+          <InfoWindow position={selectedReport.position} onCloseClick={() => setSelectedReport(null)}>
+            <div style={{ padding: "8px 4px", minWidth: 200 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, color: "#fff", backgroundColor: cfg.color }}>
+                  {cfg.label}
+                </span>
+                <span style={{ fontSize: 10, color: "#94a3b8" }}>{ageMin < 60 ? `${ageMin} min fa` : `${Math.round(ageMin / 60)}h fa`}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 11, color: "#64748b" }}>
+                <span>✓ {selectedReport.confirms} conferme</span>
+                <span>✗ {selectedReport.denials} smentite</span>
+                <span style={{ color: conf > 1 ? "#10b981" : conf < 0.5 ? "#ef4444" : "#f59e0b" }}>
+                  {Math.round(conf * 100)}% affidabile
+                </span>
+              </div>
+              {alreadyVoted ? (
+                <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center", padding: "4px 0" }}>
+                  Hai già votato questa segnalazione
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => handleVote(1)}
+                    style={{ flex: 1, padding: "6px 0", background: "#dcfce7", color: "#16a34a", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                  >
+                    ✓ C&apos;è ancora
+                  </button>
+                  <button
+                    onClick={() => handleVote(-1)}
+                    style={{ flex: 1, padding: "6px 0", background: "#fee2e2", color: "#dc2626", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                  >
+                    ✗ Non c&apos;è più
+                  </button>
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Confermato da {selectedReport.upvotes} utenti</div>
-          </div>
-        </InfoWindow>
-      )}
+          </InfoWindow>
+        );
+      })()}
 
       {/* News markers */}
       {newsMarkers.map((n) => {
         const cfg = NEWS_MARKER_CONFIG[n.category];
         if (!cfg) return null;
         return (
-          <Marker
-            key={`news-${n.id}`}
-            position={n.position}
+          <Marker key={`news-${n.id}`} position={n.position}
             onClick={() => { setSelectedNews(n); setSelectedReport(null); setSelectedWz(null); }}
-            icon={{
-              path: "M-12,-12 L12,-12 L12,12 L-12,12 Z",
-              scale: 1,
-              fillColor: cfg.color,
-              fillOpacity: 0.9,
-              strokeColor: "#fff",
-              strokeWeight: 2,
-              anchor: new google.maps.Point(0, 0),
-            }}
-            zIndex={45}
-          />
+            icon={{ path: "M-12,-12 L12,-12 L12,12 L-12,12 Z", scale: 1, fillColor: cfg.color, fillOpacity: 0.9, strokeColor: "#fff", strokeWeight: 2, anchor: new google.maps.Point(0, 0) }}
+            zIndex={45} />
         );
       })}
       {selectedNews && NEWS_MARKER_CONFIG[selectedNews.category] && (
         <InfoWindow position={selectedNews.position} onCloseClick={() => setSelectedNews(null)}>
           <div style={{ padding: 6, maxWidth: 240 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, color: "#fff", backgroundColor: NEWS_MARKER_CONFIG[selectedNews.category].color }}>
-                {NEWS_MARKER_CONFIG[selectedNews.category].label}
-              </span>
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 600, margin: "4px 0", lineHeight: 1.4 }}>{selectedNews.title}</p>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>{selectedNews.source} &middot; {selectedNews.date}</div>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, color: "#fff", backgroundColor: NEWS_MARKER_CONFIG[selectedNews.category].color }}>
+              {NEWS_MARKER_CONFIG[selectedNews.category].label}
+            </span>
+            <p style={{ fontSize: 12, fontWeight: 600, margin: "6px 0 2px", lineHeight: 1.4 }}>{selectedNews.title}</p>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>{selectedNews.source}</div>
             {selectedNews.url && (
               <a href={selectedNews.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#2563eb", fontWeight: 600, marginTop: 4, display: "inline-block" }}>
-                Leggi notizia &rarr;
+                Leggi notizia →
               </a>
             )}
           </div>

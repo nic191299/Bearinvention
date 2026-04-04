@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "R-Home — Roma Pedoni e Mezzi",
-  description: "Naviga Roma a piedi e con i mezzi. Segnalazioni live, meteo radar, notizie trasporti, AI assistant.",
+  title: "BearInvention — Sicurezza e Mobilità Urbana",
+  description: "Segnalazioni live, sicurezza urbana, meteo radar, notizie trasporti e AI assistant per le città italiane.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

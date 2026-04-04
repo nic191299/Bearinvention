@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { NewsAlert } from "@/lib/types";
 
-// Keywords to detect relevant news
 const STRIKE_KEYWORDS = ["sciopero", "scioperi", "agitazione", "astensione"];
 const ROAD_KEYWORDS = ["strada chiusa", "chiusura", "deviazione", "deviazioni", "lavori", "cantiere", "interdetta", "transennata"];
 const EVENT_KEYWORDS = ["manifestazione", "corteo", "evento", "maratona", "processione", "partita", "concerto", "adunata"];
-const TRANSPORT_KEYWORDS = ["atac", "metro", "metropolitana", "tram", "bus", "cotral", "trenitalia", "linea", "ritardo", "sospesa", "interrotta", "guasto"];
-const CRIME_KEYWORDS = ["furto", "furti", "rapina", "rapine", "scippo", "borseggio", "aggressione", "accoltellamento", "rissa", "molestie", "violenza", "spaccio", "arresto", "arrestat", "derubat", "rubato"];
+const TRANSPORT_KEYWORDS = ["metro", "metropolitana", "tram", "bus", "cotral", "trenitalia", "linea", "ritardo", "sospesa", "interrotta", "guasto", "atac", "atm", "anm", "gtt", "actv"];
+const CRIME_KEYWORDS = ["furto", "furti", "rapina", "rapine", "scippo", "borseggio", "aggressione", "accoltellamento", "rissa", "molestie", "violenza", "spaccio", "arresto", "arrestat", "derubat"];
 
 function categorize(text: string): NewsAlert["category"] {
   const lower = text.toLowerCase();
@@ -22,19 +21,15 @@ function parseRssItems(xml: string, source: string): NewsAlert[] {
   const items: NewsAlert[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
   let match;
-
   while ((match = itemRegex.exec(xml)) !== null) {
     const content = match[1];
     const title = content.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)?.[1] || "";
     const link = content.match(/<link>(.*?)<\/link>/)?.[1] || "";
     const pubDate = content.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
-
-    // Filter: only Rome-relevant transport/mobility news
     const lower = title.toLowerCase();
     const isRelevant =
       [...STRIKE_KEYWORDS, ...ROAD_KEYWORDS, ...EVENT_KEYWORDS, ...TRANSPORT_KEYWORDS, ...CRIME_KEYWORDS].some((k) => lower.includes(k)) ||
-      lower.includes("roma") || lower.includes("traffico") || lower.includes("mobilit") || lower.includes("sicurezza");
-
+      lower.includes("traffico") || lower.includes("mobilit") || lower.includes("sicurezza");
     if (title && isRelevant) {
       items.push({
         id: `news-${items.length}-${Date.now()}`,
@@ -46,52 +41,53 @@ function parseRssItems(xml: string, source: string): NewsAlert[] {
       });
     }
   }
-
   return items;
 }
 
-const RSS_FEEDS = [
-  {
-    url: "https://news.google.com/rss/search?q=roma+sciopero+trasporti+OR+metro+OR+atac+OR+strada+chiusa+OR+traffico&hl=it&gl=IT&ceid=IT:it",
-    source: "Google News",
-  },
-  {
-    url: "https://news.google.com/rss/search?q=roma+furto+OR+rapina+OR+aggressione+OR+scippo+OR+borseggio+OR+sicurezza+quartiere&hl=it&gl=IT&ceid=IT:it",
-    source: "Google News",
-  },
-  {
-    url: "https://www.romatoday.it/rss/trasporti/",
-    source: "RomaToday",
-  },
-  {
-    url: "https://www.romatoday.it/rss/cronaca/",
-    source: "RomaToday",
-  },
+function getRssFeeds(city: string) {
+  const q = encodeURIComponent(city);
+  return [
+    {
+      url: `https://news.google.com/rss/search?q=${q}+sciopero+trasporti+OR+metro+OR+strada+chiusa+OR+traffico&hl=it&gl=IT&ceid=IT:it`,
+      source: "Google News",
+    },
+    {
+      url: `https://news.google.com/rss/search?q=${q}+furto+OR+rapina+OR+aggressione+OR+scippo+OR+sicurezza&hl=it&gl=IT&ceid=IT:it`,
+      source: "Google News",
+    },
+  ];
+}
+
+// Rome-specific RSS feeds
+const ROME_FEEDS = [
+  { url: "https://www.romatoday.it/rss/trasporti/", source: "RomaToday" },
+  { url: "https://www.romatoday.it/rss/cronaca/", source: "RomaToday" },
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const city = request.nextUrl.searchParams.get("city") || "Roma";
+
+  const feeds = [
+    ...getRssFeeds(city),
+    ...(city.toLowerCase() === "roma" ? ROME_FEEDS : []),
+  ];
+
   try {
     const allAlerts: NewsAlert[] = [];
-
     const results = await Promise.allSettled(
-      RSS_FEEDS.map(async (feed) => {
+      feeds.map(async (feed) => {
         const res = await fetch(feed.url, {
-          headers: { "User-Agent": "R-Home/1.0" },
-          next: { revalidate: 600 }, // Cache 10 min
+          headers: { "User-Agent": "BearInvention/1.0" },
+          next: { revalidate: 600 },
         });
         if (!res.ok) return [];
         const xml = await res.text();
         return parseRssItems(xml, feed.source);
       })
     );
-
     for (const result of results) {
-      if (result.status === "fulfilled") {
-        allAlerts.push(...result.value);
-      }
+      if (result.status === "fulfilled") allAlerts.push(...result.value);
     }
-
-    // Deduplicate by similar titles
     const seen = new Set<string>();
     const unique = allAlerts.filter((a) => {
       const key = a.title.substring(0, 50).toLowerCase();
@@ -99,11 +95,8 @@ export async function GET() {
       seen.add(key);
       return true;
     });
-
-    // Sort by date, limit to 15
     unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    return NextResponse.json({ alerts: unique.slice(0, 15) });
+    return NextResponse.json({ alerts: unique.slice(0, 20) });
   } catch (error) {
     console.error("News fetch error:", error);
     return NextResponse.json({ alerts: [] });
