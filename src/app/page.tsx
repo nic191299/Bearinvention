@@ -26,7 +26,7 @@ const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 // Debug: log in browser console to verify key is loaded
 if (typeof window !== "undefined") {
-  console.log("[Safez] Maps API key loaded:", API_KEY ? `${API_KEY.slice(0, 8)}...` : "MISSING ⚠️");
+  console.log("[Salvo] Maps API key loaded:", API_KEY ? `${API_KEY.slice(0, 8)}...` : "MISSING ⚠️");
 }
 
 interface FamilyMember {
@@ -292,12 +292,19 @@ export default function Home() {
   // While checking auth show a loading screen
   if (!authLoaded) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-white rounded-3xl shadow-2xl flex items-center justify-center">
-            <span className="material-symbols-outlined text-blue-600 text-[36px]">shield</span>
+      <div
+        className="h-screen w-screen flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #061826 0%, #0A2438 60%, #061826 100%)" }}
+      >
+        <div className="flex flex-col items-center gap-5">
+          <div className="w-16 h-16 rounded-3xl shadow-2xl flex items-center justify-center" style={{ background: "#05C3B2" }}>
+            <img src="/logo.svg" alt="Salvo" className="w-10 h-10" style={{ filter: "brightness(0) invert(1)" }} />
           </div>
-          <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" style={{ borderWidth: 3 }} />
+          <p className="text-white/60 text-xs tracking-[0.25em] uppercase font-semibold">Salvo</p>
+          <div
+            className="w-7 h-7 rounded-full border-2 border-t-transparent"
+            style={{ borderColor: "#05C3B2", borderTopColor: "transparent", animation: "salvoSpin 0.8s linear infinite" }}
+          />
         </div>
       </div>
     );
@@ -369,22 +376,23 @@ export default function Home() {
         style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}
       >
         <div className="flex items-center gap-2 pt-1">
-          {/* Hamburger */}
+          {/* Hamburger / brand mark */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="glass w-11 h-11 rounded-2xl shadow-lg flex items-center justify-center hover:bg-white transition shrink-0"
+            className="glass w-11 h-11 rounded-2xl shadow-lg flex items-center justify-center hover:bg-white transition shrink-0 overflow-hidden"
           >
-            <span className="material-symbols-outlined text-gray-700 text-[22px]">menu</span>
+            <img src="/logo.svg" alt="Salvo" className="w-6 h-6" />
           </button>
 
           {/* Route search toggle */}
           <button
             onClick={() => setRouteOpen(!routeOpen)}
-            className={`flex-1 glass rounded-2xl shadow-lg px-3 h-11 flex items-center gap-2 transition ${routeActive ? "border-2 border-blue-500" : ""}`}
+            className="flex-1 glass rounded-2xl shadow-lg px-3 h-11 flex items-center gap-2 transition"
+            style={routeActive ? { border: "2px solid #05C3B2" } : {}}
           >
             {routeActive ? (
               <>
-                <span className="material-symbols-outlined text-blue-600 text-[18px]">route</span>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: "#05C3B2" }}>route</span>
                 <span className="text-sm font-semibold text-gray-800 truncate">{routeInfo?.duration} · {routeInfo?.distance}</span>
               </>
             ) : (
@@ -399,7 +407,8 @@ export default function Home() {
           {weather && (
             <button
               onClick={() => setShowRadar(!showRadar)}
-              className={`glass rounded-2xl shadow-lg h-11 px-3 flex items-center gap-1.5 shrink-0 transition ${showRadar ? "bg-blue-600 text-white" : ""}`}
+              className="glass rounded-2xl shadow-lg h-11 px-3 flex items-center gap-1.5 shrink-0 transition"
+              style={showRadar ? { backgroundColor: "#05C3B2", color: "white" } : {}}
             >
               <span className="material-symbols-outlined text-[18px]">{weather.precipitation > 0 ? "rainy" : "wb_sunny"}</span>
               <span className="text-xs font-bold">{Math.round(weather.temperature)}°</span>
@@ -441,20 +450,26 @@ export default function Home() {
           onClick={recenter}
           className="glass shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center hover:bg-white transition"
         >
-          <span className="material-symbols-outlined text-blue-600 text-[20px]">my_location</span>
+          <span className="material-symbols-outlined text-[20px]" style={{ color: "#05C3B2" }}>my_location</span>
         </button>
         <button
           onClick={() => setShowHeatmap(!showHeatmap)}
-          className={`shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition ${showHeatmap ? "bg-red-500 text-white" : "glass hover:bg-white"}`}
+          className="shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition"
+          style={showHeatmap
+            ? { backgroundColor: "#ef4444", color: "white" }
+            : { background: "rgba(255,255,255,0.92)", backdropFilter: "blur(14px)" }}
           title="Mappa pericoli"
         >
-          <span className={`material-symbols-outlined text-[20px] ${showHeatmap ? "" : "text-red-500"}`}>local_fire_department</span>
+          <span className="material-symbols-outlined text-[20px]" style={{ color: showHeatmap ? "white" : "#ef4444" }}>local_fire_department</span>
         </button>
         <button
           onClick={() => setShowTraffic(!showTraffic)}
-          className={`shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition ${showTraffic ? "bg-orange-500 text-white" : "glass hover:bg-white"}`}
+          className="shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition"
+          style={showTraffic
+            ? { backgroundColor: "#F0A500", color: "white" }
+            : { background: "rgba(255,255,255,0.92)", backdropFilter: "blur(14px)" }}
         >
-          <span className={`material-symbols-outlined text-[20px] ${showTraffic ? "" : "text-orange-500"}`}>traffic</span>
+          <span className="material-symbols-outlined text-[20px]" style={{ color: showTraffic ? "white" : "#F0A500" }}>traffic</span>
         </button>
       </div>
 

@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     const results = await Promise.allSettled(
       feeds.map(async (feed) => {
         const res = await fetch(feed.url, {
-          headers: { "User-Agent": "Safez/1.0" },
+          headers: { "User-Agent": "Salvo/1.0" },
           next: { revalidate: 600 },
         });
         if (!res.ok) return [];

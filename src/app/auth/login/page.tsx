@@ -48,17 +48,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center px-4">
-      <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 2px 2px, white 1px, transparent 0)", backgroundSize: "32px 32px" }} />
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: "linear-gradient(145deg, #061826 0%, #0A2438 50%, #061826 100%)" }}
+    >
+      {/* Subtle dot grid */}
+      <div
+        className="absolute inset-0 opacity-[0.06]"
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #05C3B2 1px, transparent 0)", backgroundSize: "28px 28px" }}
+      />
 
       <div className="relative z-10 w-full max-w-sm animate-fade-in-up">
-        {/* Logo */}
-        <div className="text-center mb-6">
-          <Link href="/" className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl shadow-xl mb-3">
-            <span className="material-symbols-outlined text-blue-600 text-[36px]">shield</span>
+        {/* Logo + brand */}
+        <div className="text-center mb-7">
+          <Link href="/" className="inline-flex flex-col items-center gap-3">
+            <div
+              className="w-16 h-16 rounded-3xl shadow-2xl flex items-center justify-center"
+              style={{ background: "#05C3B2", boxShadow: "0 12px 40px rgba(5,195,178,0.4)" }}
+            >
+              <img src="/logo.svg" alt="Salvo" className="w-10 h-10" style={{ filter: "brightness(0) invert(1)" }} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black tracking-tight" style={{ color: "#05C3B2" }}>Salvo</h1>
+              <p className="text-white/40 text-sm mt-0.5">Accedi al tuo account</p>
+            </div>
           </Link>
-          <h1 className="text-2xl font-bold text-white">Accedi</h1>
-          <p className="text-blue-200 text-sm mt-1">Benvenuto su Safez</p>
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-6 space-y-4">
@@ -104,7 +118,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="la-tua@email.it"
                 required
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#05C3B2]"
               />
             </div>
             <div>
@@ -116,7 +130,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-11"
+                  className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#05C3B2] pr-11"
                 />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2">
                   <span className="material-symbols-outlined text-gray-400 text-[18px]">{showPw ? "visibility_off" : "visibility"}</span>
@@ -132,7 +146,7 @@ export default function LoginPage() {
             )}
 
             <div className="text-right">
-              <Link href="/auth/forgot-password" className="text-xs text-blue-600 hover:underline">
+              <Link href="/auth/forgot-password" className="text-xs font-medium hover:underline" style={{ color: "#05C3B2" }}>
                 Password dimenticata?
               </Link>
             </div>
@@ -140,23 +154,26 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 text-white rounded-xl font-bold text-sm transition disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: loading ? "#04A899" : "linear-gradient(135deg, #07DCC8 0%, #05C3B2 100%)", boxShadow: "0 6px 20px rgba(5,195,178,0.35)" }}
             >
-              {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+              {loading
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full" style={{ animation: "salvoSpin 0.8s linear infinite" }} />
+                : null}
               Accedi
             </button>
           </form>
 
           <p className="text-center text-xs text-gray-500">
             Non hai un account?{" "}
-            <Link href="/auth/register" className="text-blue-600 font-semibold hover:underline">
+            <Link href="/auth/register" className="font-bold hover:underline" style={{ color: "#05C3B2" }}>
               Registrati
             </Link>
           </p>
         </div>
 
-        <p className="text-center text-blue-400 text-xs mt-4">
-          Safez — La tua sicurezza in città
+        <p className="text-center text-xs mt-4" style={{ color: "rgba(5,195,178,0.5)" }}>
+          Salvo — La tua sicurezza in città
         </p>
       </div>
     </div>

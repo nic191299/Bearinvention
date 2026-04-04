@@ -115,7 +115,7 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
     if (!familyCode) return;
     const url = `${window.location.origin}/family/join?code=${familyCode}`;
     if (navigator.share) {
-      navigator.share({ title: "Unisciti alla mia famiglia su Safez", url });
+      navigator.share({ title: "Unisciti alla mia famiglia su Salvo", url });
     } else {
       navigator.clipboard.writeText(url);
       alert("Link copiato!");
@@ -145,21 +145,31 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-4 bg-blue-600 text-white shrink-0">
-          <div className="flex items-center gap-2 flex-1">
-            <img src="/logo.svg" alt="Safez" className="w-7 h-7 brightness-0 invert" />
-            <span className="text-lg font-black tracking-tight">Safez</span>
+        <div
+          className="flex items-center gap-3 px-4 py-4 text-white shrink-0"
+          style={{ background: "linear-gradient(135deg, #061826 0%, #0A2438 100%)" }}
+        >
+          <div className="flex items-center gap-2.5 flex-1">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "#05C3B2" }}>
+              <img src="/logo.svg" alt="Salvo" className="w-5 h-5" style={{ filter: "brightness(0) invert(1)" }} />
+            </div>
+            <span className="text-lg font-black tracking-tight" style={{ color: "#05C3B2" }}>Salvo</span>
           </div>
           {city && (
             <button
               onClick={onCityChange}
-              className="flex items-center gap-1 text-xs text-blue-100 bg-blue-700/60 px-2.5 py-1.5 rounded-xl"
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl"
+              style={{ background: "rgba(5,195,178,0.15)", color: "#05C3B2" }}
             >
               <span className="material-symbols-outlined text-[12px]">location_on</span>
               {city.name}
             </button>
           )}
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-blue-700/60 flex items-center justify-center">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center"
+            style={{ background: "rgba(255,255,255,0.08)" }}
+          >
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
@@ -173,9 +183,10 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
             <button
               key={t.key}
               onClick={() => setTab(t.key as typeof tab)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold border-b-2 transition ${
-                tab === t.key ? "border-blue-600 text-blue-600" : "border-transparent text-gray-400"
-              }`}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold border-b-2 transition"
+              style={tab === t.key
+                ? { borderColor: "#05C3B2", color: "#05C3B2" }
+                : { borderColor: "transparent", color: "#9ca3af" }}
             >
               <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
               {t.label}
@@ -190,7 +201,7 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {loading ? (
             <div className="flex items-center justify-center h-40">
-              <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 rounded-full border-2 border-t-transparent" style={{ borderColor: "#05C3B2", borderTopColor: "transparent", animation: "salvoSpin 0.8s linear infinite" }} />
             </div>
           ) : (
             <>
@@ -201,7 +212,7 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">Segnalazioni attive</h3>
-                      <Link href={`/community?city=${city?.name}`} onClick={onClose} className="text-[10px] text-blue-600">Vedi tutte →</Link>
+                      <Link href={`/community?city=${city?.name}`} onClick={onClose} className="text-[10px] text-[#05C3B2]">Vedi tutte →</Link>
                     </div>
                     {activeReports.length === 0 ? (
                       <div className="text-center py-6 text-gray-400 text-xs">
@@ -233,7 +244,7 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide">Commenti recenti</h3>
-                      <Link href={`/community?city=${city?.name}`} onClick={onClose} className="text-[10px] text-blue-600">Vai →</Link>
+                      <Link href={`/community?city=${city?.name}`} onClick={onClose} className="text-[10px] text-[#05C3B2]">Vai →</Link>
                     </div>
                     {comments.length === 0 ? (
                       <div className="text-center py-4 text-gray-400 text-xs">Nessun commento</div>
@@ -344,7 +355,7 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
                             <span className="material-symbols-outlined text-[14px]" style={{ color: cfg.color }}>{cfg.icon}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 line-clamp-2 group-hover:text-blue-600">{n.title}</p>
+                            <p className="text-xs font-medium text-gray-800 line-clamp-2 group-hover:text-[#05C3B2]">{n.title}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: cfg.color + "18", color: cfg.color }}>{cfg.label}</span>
                               <span className="text-[9px] text-gray-400">{n.source}</span>
@@ -412,7 +423,8 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
               <Link
                 href="/auth/login"
                 onClick={onClose}
-                className="px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition"
+                className="px-3 py-2 text-white text-xs font-bold rounded-xl transition"
+                style={{ backgroundColor: "#05C3B2" }}
               >
                 Accedi
               </Link>

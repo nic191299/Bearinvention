@@ -70,7 +70,7 @@ function JoinContent() {
             </div>
             <h2 className="text-xl font-bold text-gray-800">Invito famiglia</h2>
             <p className="text-sm text-gray-500">
-              Sei stato invitato a unirsi a <strong>{groupName}</strong> su Safez.<br />
+              Sei stato invitato a unirsi a <strong>{groupName}</strong> su Salvo.<br />
               Potrai condividere la tua posizione in tempo reale con i tuoi cari.
             </p>
             <button

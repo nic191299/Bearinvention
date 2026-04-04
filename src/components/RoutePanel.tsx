@@ -129,17 +129,17 @@ export default function RoutePanel({
         <div className="flex items-center gap-2.5">
           {/* Dot connector */}
           <div className="flex flex-col items-center gap-0.5 shrink-0">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-blue-200" />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#05C3B2", boxShadow: "0 0 0 3px rgba(5,195,178,0.25)" }} />
             <div className="w-px h-4 bg-gray-200" />
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-red-200" />
           </div>
           <div className="flex-1 space-y-1.5">
             {editOrigin ? (
               <input ref={originInputRef} type="text" placeholder="Da dove parti?" autoFocus
-                className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#05C3B2]" />
             ) : (
               <div onClick={() => setEditOrigin(true)}
-                className="w-full px-3 py-2.5 bg-blue-50 rounded-2xl text-sm text-blue-700 font-medium flex items-center justify-between cursor-pointer">
+                className="w-full px-3 py-2.5 bg-[#05C3B2]/10 rounded-2xl text-sm text-[#04A899] font-medium flex items-center justify-between cursor-pointer">
                 <span className="flex items-center gap-1.5 truncate">
                   <span className="material-symbols-outlined text-[14px]">my_location</span>
                   {originText || "La mia posizione"}
@@ -153,7 +153,7 @@ export default function RoutePanel({
             <input ref={destRef} type="text" placeholder="Dove vuoi andare?"
               defaultValue={destinationText}
               onChange={e => { if (!e.target.value) destPosRef.current = null; }}
-              className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white" />
+              className="w-full px-3 py-2.5 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#05C3B2] focus:bg-white" />
           </div>
         </div>
 
@@ -161,9 +161,11 @@ export default function RoutePanel({
         <div className="flex gap-2">
           {(["WALKING", "TRANSIT"] as const).map(m => (
             <button key={m} onClick={() => onModeChange(m)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-xs font-bold transition-all ${
-                mode === m ? "bg-blue-600 text-white shadow-md" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}>
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-xs font-bold transition-all"
+              style={mode === m
+                ? { backgroundColor: "#05C3B2", color: "white", boxShadow: "0 4px 14px rgba(5,195,178,0.35)" }
+                : { backgroundColor: "#f1f5f9", color: "#6b7280" }}
+            >
               <span className="material-symbols-outlined text-[15px]">
                 {m === "WALKING" ? "directions_walk" : "directions_bus"}
               </span>
@@ -180,7 +182,7 @@ export default function RoutePanel({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
-                <span className="material-symbols-outlined text-blue-600 text-[15px]">schedule</span>
+                <span className="material-symbols-outlined text-[15px]" style={{ color: "#05C3B2" }}>schedule</span>
                 <span className="text-sm font-bold text-gray-800">{routeInfo.duration}</span>
               </div>
               <span className="text-xs text-gray-400">{routeInfo.distance}</span>
@@ -223,7 +225,7 @@ export default function RoutePanel({
               <button onClick={() => setShowItinerary(v => !v)}
                 className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 rounded-2xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition">
                 <span className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[14px] text-blue-500">route</span>
+                  <span className="material-symbols-outlined text-[14px] text-[#05C3B2]">route</span>
                   {showItinerary ? "Nascondi dettagli" : "Vedi itinerario dettagliato"}
                 </span>
                 <span className="material-symbols-outlined text-[16px] text-gray-400">
@@ -297,9 +299,9 @@ export default function RoutePanel({
                             {/* Departure time */}
                             {step.departureTime && (
                               <div className="flex items-center gap-1.5 mt-1.5">
-                                <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-lg">
-                                  <span className="material-symbols-outlined text-blue-500 text-[11px]">schedule</span>
-                                  <span className="text-[10px] font-bold text-blue-600">Parte {step.departureTime}</span>
+                                <div className="flex items-center gap-1 bg-[#05C3B2]/10 px-2 py-0.5 rounded-lg">
+                                  <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
+                                  <span className="text-[10px] font-bold text-[#05C3B2]">Parte {step.departureTime}</span>
                                 </div>
                                 {step.arrivalTime && (
                                   <div className="flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded-lg">

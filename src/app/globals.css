@@ -2,89 +2,118 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── SALVO Design Tokens ─────────────────────────────────────── */
 :root {
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --success: #10b981;
-  --dark: #0f172a;
+  --primary:       #05C3B2;
+  --primary-dark:  #04A899;
+  --primary-glow:  rgba(5, 195, 178, 0.18);
+  --ocean:         #061826;
+  --ocean-mid:     #0A2438;
+  --ocean-light:   #0D2F4A;
+  --gold:          #F0A500;
+  --danger:        #ef4444;
+  --warning:       #F0A500;
+  --success:       #10b981;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f8fafc;
+  font-family: var(--font-geist), Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--ocean);
   color: #1e293b;
 }
 
-/* Material Icons */
+/* ── Material Symbols ────────────────────────────────────────── */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* Custom scrollbar */
+/* ── Scrollbars ──────────────────────────────────────────────── */
 .custom-scroll::-webkit-scrollbar { width: 5px; }
 .custom-scroll::-webkit-scrollbar-track { background: transparent; }
 .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-/* Animations */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-@keyframes slideInLeft {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
-}
-@keyframes slideInUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-@keyframes pulse-ring {
-  0% { transform: scale(0.8); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
-}
-@keyframes livePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
-.animate-fade-in { animation: fadeIn 0.2s ease-out; }
-.animate-slide-in-right { animation: slideInRight 0.3s ease-out; }
-.animate-slide-in-left { animation: slideInLeft 0.3s ease-out; }
-.animate-slide-in-up { animation: slideInUp 0.3s ease-out; }
-.animate-live-pulse { animation: livePulse 2s ease-in-out infinite; }
-
-/* Hide scrollbar (mobile UI) */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Glass effect */
-.glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+/* ── Animations ──────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.glass-dark {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slideInUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+@keyframes salvoSpin {
+  to { transform: rotate(360deg); }
 }
 
-/* Map marker styles */
+.animate-fade-in-up    { animation: fadeInUp 0.3s ease-out; }
+.animate-fade-in       { animation: fadeIn 0.2s ease-out; }
+.animate-slide-in-right{ animation: slideInRight 0.3s ease-out; }
+.animate-slide-in-left { animation: slideInLeft 0.3s ease-out; }
+.animate-slide-in-up   { animation: slideInUp 0.3s ease-out; }
+.animate-live-pulse    { animation: livePulse 2s ease-in-out infinite; }
+
+/* ── Glass variants ──────────────────────────────────────────── */
+/* Light glass — white panels floating over map */
+.glass {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+/* Dark glass — ocean tinted panels */
+.glass-dark {
+  background: rgba(6, 24, 38, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+/* Teal glass — active / selected states */
+.glass-teal {
+  background: rgba(5, 195, 178, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(5, 195, 178, 0.25);
+}
+
+/* ── Map overrides ───────────────────────────────────────────── */
+.gm-style-iw-d { overflow: hidden !important; }
+.gm-style-iw   { padding: 0 !important; }
+
+/* ── User location pulse ─────────────────────────────────────── */
+.user-marker-pulse {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(5, 195, 178, 0.28);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ── Map marker ──────────────────────────────────────────────── */
 .map-marker {
   display: flex;
   align-items: center;
@@ -97,31 +126,17 @@ body {
 }
 .map-marker:hover { transform: scale(1.15); }
 
-/* User location pulse */
-.user-marker-pulse {
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(37, 99, 235, 0.3);
-  animation: pulse-ring 2s ease-out infinite;
-}
-
-/* Hide Google Maps info windows default styling overrides */
-.gm-style-iw-d { overflow: hidden !important; }
-.gm-style-iw { padding: 0 !important; }
-
-/* Page transitions */
+/* ── Page enter ──────────────────────────────────────────────── */
 .page-enter { animation: fadeIn 0.3s ease-out; }
 
-/* Chip button */
+/* ── Chip ────────────────────────────────────────────────────── */
 .chip {
   @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer;
 }
 .chip:hover { @apply shadow-sm; }
 .chip-active { @apply ring-2 ring-offset-1; }
 
-/* Report card */
+/* ── Report card ─────────────────────────────────────────────── */
 .report-card {
   @apply bg-white rounded-2xl p-4 border border-gray-100 transition-all;
 }

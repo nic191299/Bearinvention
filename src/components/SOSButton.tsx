@@ -57,7 +57,7 @@ export default function SOSButton({ userPosition, userProfile, userId, forceOpen
     logSos("trusted_contact");
     const name = userProfile.trusted_contact_name || "Contatto";
     const msg = encodeURIComponent(
-      `🚨 SOS — ${name}, ho bisogno di aiuto!\nLa mia posizione attuale:\n${mapsUrl}\n\nInviato automaticamente da Safez`
+      `🚨 SOS — ${name}, ho bisogno di aiuto!\nLa mia posizione attuale:\n${mapsUrl}\n\nInviato automaticamente da Salvo`
     );
     const phone = userProfile.trusted_contact_phone.replace(/\s/g, "");
     const waUrl = `https://wa.me/${phone.replace("+", "")}?text=${msg}`;
@@ -71,7 +71,7 @@ export default function SOSButton({ userPosition, userProfile, userId, forceOpen
     logSos("share");
     const text = `🚨 SOS — Ho bisogno di aiuto.\nPosizione: ${mapsUrl}`;
     if (navigator.share) {
-      try { await navigator.share({ title: "SOS Safez", text }); } catch { /* cancelled */ }
+      try { await navigator.share({ title: "SOS Salvo", text }); } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(text);
       setSent("Posizione copiata negli appunti");

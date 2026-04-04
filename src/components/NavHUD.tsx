@@ -83,9 +83,13 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
           if (step.mode === "WALKING") {
             return (
               <div key={i} className="flex items-center gap-0.5">
-                <div className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all ${
-                  done ? "bg-green-500" : active ? "bg-blue-600 ring-2 ring-blue-300 ring-offset-1" : "bg-gray-100"
-                }`}>
+                <div
+                  className="w-5 h-5 rounded-lg flex items-center justify-center transition-all"
+                  style={{
+                    backgroundColor: done ? "#10b981" : active ? "#05C3B2" : "#f1f5f9",
+                    boxShadow: active ? "0 0 0 2px rgba(5,195,178,0.3)" : undefined,
+                  }}
+                >
                   <span className={`material-symbols-outlined text-[10px] ${done || active ? "text-white" : "text-gray-400"}`}>
                     {done ? "check" : "directions_walk"}
                   </span>
@@ -97,7 +101,7 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
             );
           }
           // TRANSIT chip
-          const bg = done ? "#10b981" : active ? (step.lineColor || "#3b82f6") : "#e5e7eb";
+          const bg = done ? "#10b981" : active ? (step.lineColor || "#05C3B2") : "#e5e7eb";
           const fg = done || active ? (step.lineTextColor || "#fff") : "#9ca3af";
           return (
             <div key={i} className="flex items-center gap-0.5">
@@ -129,15 +133,15 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
           <div className="p-3">
             <div className="flex items-center gap-2">
               {/* Walker icon */}
-              <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-blue-600 text-[22px]">directions_walk</span>
+              <div className="w-10 h-10 bg-[#05C3B2]/10 rounded-2xl flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[#05C3B2] text-[22px]">directions_walk</span>
               </div>
 
               {/* Bar + time */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">A piedi</span>
-                  <span className="text-[12px] font-black text-blue-600">
+                  <span className="text-[12px] font-black text-[#05C3B2]">
                     {watching ? `${remainingMin} min` : cur.duration}
                   </span>
                 </div>
@@ -147,7 +151,7 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                     className="h-full rounded-full transition-all duration-[800ms] ease-out"
                     style={{
                       width: `${progressPct}%`,
-                      background: "linear-gradient(90deg, #60a5fa, #3b82f6)",
+                      background: "linear-gradient(90deg, #07DCC8, #05C3B2)",
                     }}
                   />
                 </div>
@@ -239,19 +243,19 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
             <div className="flex items-center gap-1.5">
               {/* Departure countdown */}
               {deptInMin !== null ? (
-                <div className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1 flex-1">
-                  <span className="material-symbols-outlined text-blue-500 text-[11px]">schedule</span>
-                  <span className="text-[10px] font-bold text-blue-700">
+                <div className="flex items-center gap-1 bg-[#05C3B2]/10 rounded-lg px-2 py-1 flex-1">
+                  <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
+                  <span className="text-[10px] font-bold text-[#04A899]">
                     {deptInMin <= 0 ? "In partenza" : `tra ${deptInMin} min`}
                   </span>
                   {cur.departureTime && (
-                    <span className="text-[9px] text-blue-400 ml-auto">{cur.departureTime}</span>
+                    <span className="text-[9px] text-[#05C3B2]/60 ml-auto">{cur.departureTime}</span>
                   )}
                 </div>
               ) : cur.departureTime ? (
-                <div className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1">
-                  <span className="material-symbols-outlined text-blue-500 text-[11px]">schedule</span>
-                  <span className="text-[10px] font-bold text-blue-700">{cur.departureTime}</span>
+                <div className="flex items-center gap-1 bg-[#05C3B2]/10 rounded-lg px-2 py-1">
+                  <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
+                  <span className="text-[10px] font-bold text-[#04A899]">{cur.departureTime}</span>
                 </div>
               ) : null}
 

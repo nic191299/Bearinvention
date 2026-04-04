@@ -1,12 +1,12 @@
 {
-  "name": "Safez — Sicurezza Urbana",
-  "short_name": "Safez",
+  "name": "Salvo — Sicurezza Urbana",
+  "short_name": "Salvo",
   "description": "Segnalazioni live, sicurezza urbana e condivisione famiglia",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#2563eb",
+  "background_color": "#061826",
+  "theme_color": "#05C3B2",
   "icons": [
     {
       "src": "/icons/icon-192.png",
