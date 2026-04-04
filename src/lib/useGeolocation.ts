@@ -1,39 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LatLng } from "./types";
 
 const ROME_CENTER: LatLng = { lat: 41.9028, lng: 12.4964 };
 
-export function useGeolocation() {
+export function useGeolocation(lazy = false) {
   const [position, setPosition] = useState<LatLng>(ROME_CENTER);
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [permissionState, setPermissionState] = useState<"prompt" | "granted" | "denied" | "unknown">("unknown");
+  const [started, setStarted] = useState(!lazy);
+  const watchIdRef = useRef<number | null>(null);
 
-  // Check permission state
+  // Check permission state (without triggering prompt)
   useEffect(() => {
-    if (navigator.permissions) {
-      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+    if (!navigator.permissions) return;
+    navigator.permissions.query({ name: "geolocation" }).then((result) => {
+      setPermissionState(result.state as "prompt" | "granted" | "denied");
+      if (result.state === "granted" && lazy) setStarted(true);
+      result.addEventListener("change", () => {
         setPermissionState(result.state as "prompt" | "granted" | "denied");
-        result.addEventListener("change", () => {
-          setPermissionState(result.state as "prompt" | "granted" | "denied");
-        });
-      }).catch(() => {
-        // permissions API not supported, try geolocation directly
-        setPermissionState("unknown");
+        if (result.state === "granted") setStarted(true);
       });
-    }
-  }, []);
+    }).catch(() => setPermissionState("unknown"));
+  }, [lazy]);
 
-  // Start watching position
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setError("Geolocalizzazione non supportata dal browser");
-      return;
-    }
+    if (!started || !navigator.geolocation) return;
 
-    // Get initial position first (faster)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
@@ -42,53 +37,41 @@ export function useGeolocation() {
         setPermissionState("granted");
       },
       (err) => {
-        console.warn("Geolocation error:", err.message);
-        if (err.code === 1) {
-          setError("Permesso negato. Abilita la geolocalizzazione nelle impostazioni del browser.");
-          setPermissionState("denied");
-        } else if (err.code === 2) {
-          setError("Posizione non disponibile. Usando Roma centro come fallback.");
-        } else {
-          setError("Timeout geolocalizzazione. Usando Roma centro come fallback.");
-        }
+        if (err.code === 1) { setError("denied"); setPermissionState("denied"); }
+        else if (err.code === 2) setError("unavailable");
+        else setError("timeout");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
 
-    // Then watch for continuous updates
-    const watchId = navigator.geolocation.watchPosition(
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setWatching(true);
         setError(null);
         setPermissionState("granted");
       },
-      (err) => {
-        if (err.code === 1) {
-          setPermissionState("denied");
-        }
-        // Don't clear position on watch errors - keep last known
-      },
+      (err) => { if (err.code === 1) setPermissionState("denied"); },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
+  }, [started]);
+
+  const requestPermission = useCallback(() => {
+    setStarted(true);
   }, []);
 
   const recenter = useCallback(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setWatching(true);
-        setError(null);
-      },
-      () => {
-        // Keep current position
-      },
+      (pos) => { setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, []);
 
-  return { position, watching, error, recenter, permissionState };
+  return { position, watching, error, recenter, permissionState, requestPermission };
 }

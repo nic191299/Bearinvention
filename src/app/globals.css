@@ -44,6 +44,10 @@ body {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
 @keyframes slideInUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
@@ -60,8 +64,13 @@ body {
 .animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
 .animate-slide-in-right { animation: slideInRight 0.3s ease-out; }
+.animate-slide-in-left { animation: slideInLeft 0.3s ease-out; }
 .animate-slide-in-up { animation: slideInUp 0.3s ease-out; }
 .animate-live-pulse { animation: livePulse 2s ease-in-out infinite; }
+
+/* Hide scrollbar (mobile UI) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Glass effect */
 .glass {

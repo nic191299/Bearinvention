@@ -9,10 +9,14 @@ interface SOSButtonProps {
   userPosition: LatLng;
   userProfile?: UserProfile | null;
   userId?: string;
+  forceOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function SOSButton({ userPosition, userProfile, userId }: SOSButtonProps) {
+export default function SOSButton({ userPosition, userProfile, userId, forceOpen, onClose }: SOSButtonProps) {
   const [open, setOpen] = useState(false);
+  const isOpen = forceOpen !== undefined ? forceOpen : open;
+  const handleClose = () => { setOpen(false); onClose?.(); };
   const [sent, setSent] = useState<string | null>(null);
 
   const coords = `${userPosition.lat.toFixed(6)},${userPosition.lng.toFixed(6)}`;
@@ -38,14 +42,14 @@ export default function SOSButton({ userPosition, userProfile, userId }: SOSButt
   const handleCall = () => {
     logSos("call_112");
     window.location.href = "tel:112";
-    setOpen(false);
+    handleClose();
   };
 
   const handleSilentSMS = () => {
     logSos("silent_sms");
     const body = encodeURIComponent(`SOS - Ho bisogno di aiuto. La mia posizione: ${mapsUrl}`);
     window.location.href = `sms:112?body=${body}`;
-    setOpen(false);
+    handleClose();
   };
 
   const handleTrustedContact = () => {
@@ -53,13 +57,12 @@ export default function SOSButton({ userPosition, userProfile, userId }: SOSButt
     logSos("trusted_contact");
     const name = userProfile.trusted_contact_name || "Contatto";
     const msg = encodeURIComponent(
-      `🚨 SOS — ${name}, ho bisogno di aiuto!\nLa mia posizione attuale:\n${mapsUrl}\n\nInviato automaticamente da BearInvention`
+      `🚨 SOS — ${name}, ho bisogno di aiuto!\nLa mia posizione attuale:\n${mapsUrl}\n\nInviato automaticamente da Safez`
     );
-    // Try WhatsApp first, fallback to SMS
     const phone = userProfile.trusted_contact_phone.replace(/\s/g, "");
     const waUrl = `https://wa.me/${phone.replace("+", "")}?text=${msg}`;
     window.open(waUrl, "_blank");
-    setOpen(false);
+    handleClose();
     setSent(`Messaggio preparato per ${name}`);
     setTimeout(() => setSent(null), 3000);
   };
@@ -68,27 +71,30 @@ export default function SOSButton({ userPosition, userProfile, userId }: SOSButt
     logSos("share");
     const text = `🚨 SOS — Ho bisogno di aiuto.\nPosizione: ${mapsUrl}`;
     if (navigator.share) {
-      try { await navigator.share({ title: "SOS BearInvention", text }); } catch { /* cancelled */ }
+      try { await navigator.share({ title: "SOS Safez", text }); } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(text);
       setSent("Posizione copiata negli appunti");
       setTimeout(() => setSent(null), 2500);
     }
-    setOpen(false);
+    handleClose();
   };
 
   const hasTrustedContact = !!(userProfile?.trusted_contact_phone);
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="absolute bottom-20 md:bottom-6 left-[122px] z-20 w-[48px] h-[48px] rounded-full bg-red-600 text-white shadow-xl flex items-center justify-center hover:bg-red-700 transition active:scale-90"
-      >
-        <span className="material-symbols-outlined text-[22px]">sos</span>
-      </button>
+      {/* Only render trigger button when not externally controlled */}
+      {forceOpen === undefined && (
+        <button
+          onClick={() => setOpen(true)}
+          className="absolute bottom-20 md:bottom-6 left-[122px] z-20 w-[48px] h-[48px] rounded-full bg-red-600 text-white shadow-xl flex items-center justify-center hover:bg-red-700 transition active:scale-90"
+        >
+          <span className="material-symbols-outlined text-[22px]">sos</span>
+        </button>
+      )}
 
-      {open && (
+      {isOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 animate-fade-in">
           <div className="bg-white w-[320px] rounded-3xl shadow-2xl overflow-hidden animate-slide-in-up">
             <div className="bg-red-600 text-white px-5 py-4 flex items-center gap-3">
@@ -168,7 +174,7 @@ export default function SOSButton({ userPosition, userProfile, userId }: SOSButt
             </div>
 
             <div className="px-4 pb-4">
-              <button onClick={() => setOpen(false)} className="w-full py-2.5 text-sm text-gray-500 font-medium hover:text-gray-700 transition">
+              <button onClick={handleClose} className="w-full py-2.5 text-sm text-gray-500 font-medium hover:text-gray-700 transition">
                 Annulla
               </button>
             </div>

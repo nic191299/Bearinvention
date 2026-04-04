@@ -61,6 +61,15 @@ const NEWS_MARKER_CONFIG: Record<string, { icon: string; color: string; label: s
   crime: { icon: "local_police", color: "#dc2626", label: "Sicurezza" },
 };
 
+interface FamilyMember {
+  userId: string;
+  displayName: string;
+  avatarColor: string;
+  lat: number;
+  lng: number;
+  updatedAt: string;
+}
+
 interface MapPanelProps {
   apiKey: string;
   userPosition: LatLng;
@@ -77,6 +86,7 @@ interface MapPanelProps {
   routeMode: string;
   routeActive: boolean;
   onVote: (reportId: string, vote: 1 | -1) => void;
+  familyMembers?: FamilyMember[];
 }
 
 export default function MapPanel({
@@ -95,6 +105,7 @@ export default function MapPanel({
   routeMode,
   routeActive,
   onVote,
+  familyMembers = [],
 }: MapPanelProps) {
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries });
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -106,6 +117,7 @@ export default function MapPanel({
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [selectedNews, setSelectedNews] = useState<(NewsAlert & { position: LatLng }) | null>(null);
   const [votedReports, setVotedReports] = useState<Set<string>>(new Set());
+  const [selectedFamily, setSelectedFamily] = useState<FamilyMember | null>(null);
   const [zoom, setZoom] = useState(14);
 
   const center = cityCenter || userPosition;
@@ -258,7 +270,7 @@ export default function MapPanel({
       center={center}
       zoom={14}
       onLoad={onLoad}
-      onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); }}
+      onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); setSelectedFamily(null); }}
       options={{
         styles: MAP_STYLES,
         disableDefaultUI: true,
@@ -394,6 +406,52 @@ export default function MapPanel({
           directions={localDirections}
           options={{ suppressMarkers: false, polylineOptions: { strokeColor: "#2563eb", strokeWeight: 5, strokeOpacity: 0.8 } }}
         />
+      )}
+
+      {/* Family members */}
+      {familyMembers.map((member) => {
+        const initials = member.displayName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+        const ageMin = Math.round((Date.now() - new Date(member.updatedAt).getTime()) / 60000);
+        return (
+          <Marker
+            key={`family-${member.userId}`}
+            position={{ lat: member.lat, lng: member.lng }}
+            onClick={() => { setSelectedFamily(member); setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 14,
+              fillColor: member.avatarColor,
+              fillOpacity: 1,
+              strokeColor: "#fff",
+              strokeWeight: 3,
+            }}
+            label={{ text: initials, color: "#fff", fontSize: "10px", fontWeight: "bold" }}
+            zIndex={90}
+          />
+        );
+      })}
+      {selectedFamily && (
+        <InfoWindow
+          position={{ lat: selectedFamily.lat, lng: selectedFamily.lng }}
+          onCloseClick={() => setSelectedFamily(null)}
+        >
+          <div style={{ padding: "8px 4px", minWidth: 160 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: selectedFamily.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 12 }}>
+                {selectedFamily.displayName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{selectedFamily.displayName}</div>
+                <div style={{ fontSize: 10, color: "#94a3b8" }}>
+                  {(() => {
+                    const ageMin = Math.round((Date.now() - new Date(selectedFamily.updatedAt).getTime()) / 60000);
+                    return ageMin < 2 ? "Adesso" : ageMin < 60 ? `${ageMin} min fa` : `${Math.round(ageMin / 60)}h fa`;
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </InfoWindow>
       )}
     </GoogleMap>
   );
