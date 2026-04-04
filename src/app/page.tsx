@@ -46,8 +46,12 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
 
-  // Geolocation gate
-  const [geoStarted, setGeoStarted] = useState(false);
+  // Geolocation gate — initialise synchronously from localStorage so returning
+  // users never get lazy=true, which would prevent watchPosition from starting.
+  const [geoStarted, setGeoStarted] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("geo_granted") === "1";
+  });
   const { position, watching, recenter, permissionState, requestPermission } = useGeolocation(!geoStarted);
 
   const [city, setCity] = useState<CityInfo | null>(null);
@@ -106,11 +110,7 @@ export default function Home() {
   }, [authLoaded, userId, router]);
 
   // ── Geolocation persistence ───────────────────────────────
-  useEffect(() => {
-    const wasGranted = localStorage.getItem("geo_granted") === "1";
-    if (wasGranted) { setGeoStarted(true); requestPermission(); }
-  }, []);
-
+  // Save grant to localStorage so next load starts non-lazy
   useEffect(() => {
     if (permissionState === "granted") {
       localStorage.setItem("geo_granted", "1");

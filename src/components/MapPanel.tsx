@@ -233,23 +233,29 @@ export default function MapPanel({
     });
   }, [isLoaded, showRadar]);
 
-  // Heatmap overlay (safety density)
+  // Heatmap overlay (safety density — user reports + crime news)
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return;
-    if (heatmapRef.current) {
-      heatmapRef.current.setMap(null);
-      heatmapRef.current = null;
-    }
-    if (!showHeatmap || reports.length === 0) return;
+    if (heatmapRef.current) { heatmapRef.current.setMap(null); heatmapRef.current = null; }
+    if (!showHeatmap) return;
 
-    const data = reports.map((r) => {
+    const data: google.maps.visualization.WeightedLocation[] = [];
+
+    // User reports
+    for (const r of reports) {
       const weight =
-        r.type === "theft" ? 4 :
-        r.type === "harassment" ? 4 :
+        r.type === "theft" || r.type === "harassment" ? 5 :
         r.type === "danger" ? 3 :
         r.type === "dark_street" ? 2 : 1;
-      return { location: new google.maps.LatLng(r.position.lat, r.position.lng), weight };
-    });
+      data.push({ location: new google.maps.LatLng(r.position.lat, r.position.lng), weight });
+    }
+
+    // Crime news with geocoded position (higher weight — verified source)
+    for (const n of newsAlerts) {
+      if (n.category === "crime" && n.position) {
+        data.push({ location: new google.maps.LatLng(n.position.lat, n.position.lng), weight: 8 });
+      }
+    }
 
     heatmapRef.current = new google.maps.visualization.HeatmapLayer({
       data,
@@ -257,14 +263,14 @@ export default function MapPanel({
       radius: 60,
       opacity: 0.75,
       gradient: [
-        "rgba(0,255,100,0)",
-        "rgba(0,255,100,0.5)",
-        "rgba(255,255,0,0.7)",
-        "rgba(255,130,0,0.8)",
+        "rgba(0,0,0,0)",
+        "rgba(0,200,100,0.4)",
+        "rgba(255,255,0,0.6)",
+        "rgba(255,130,0,0.75)",
         "rgba(255,0,0,0.9)",
       ],
     });
-  }, [isLoaded, showHeatmap, reports]);
+  }, [isLoaded, showHeatmap, reports, newsAlerts]);
 
   // ── Neighbourhood safety overlay (always visible, neighbourhood-scale) ──────
   // Combines user reports + geocoded crime news into a low-opacity colour layer.
@@ -381,8 +387,8 @@ export default function MapPanel({
       )}
 
       {/* User marker */}
-      <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#2563eb", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} zIndex={100} />
-      <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 25, fillColor: "#2563eb", fillOpacity: 0.15, strokeColor: "#2563eb", strokeWeight: 1, strokeOpacity: 0.3 }} zIndex={99} clickable={false} />
+      <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#05C3B2", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} zIndex={100} />
+      <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 25, fillColor: "#05C3B2", fillOpacity: 0.15, strokeColor: "#05C3B2", strokeWeight: 1, strokeOpacity: 0.3 }} zIndex={99} clickable={false} />
 
       {/* Reports */}
       {visibleReports.map((r) => {
