@@ -22,6 +22,10 @@ import CitySelector from "@/components/CitySelector";
 const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+// Debug: log in browser console to verify key is loaded
+if (typeof window !== "undefined") {
+  console.log("[Safez] Maps API key loaded:", API_KEY ? `${API_KEY.slice(0, 8)}...` : "MISSING ⚠️");
+}
 
 interface FamilyMember {
   userId: string;
