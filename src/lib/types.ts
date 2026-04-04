@@ -25,6 +25,7 @@ export interface NewsAlert {
   url: string;
   date: string;
   category: "strike" | "road_closure" | "event" | "transport" | "crime" | "general";
+  position?: LatLng; // geocoded location if available
 }
 
 export interface ChatMessage {

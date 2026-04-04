@@ -55,10 +55,10 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link href="/" className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl shadow-xl mb-3">
-            <img src="/logo.svg" alt="BearInvention" className="w-9 h-9" />
+            <span className="material-symbols-outlined text-blue-600 text-[36px]">shield</span>
           </Link>
           <h1 className="text-2xl font-bold text-white">Accedi</h1>
-          <p className="text-blue-200 text-sm mt-1">Benvenuto su BearInvention</p>
+          <p className="text-blue-200 text-sm mt-1">Benvenuto su Safez</p>
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-6 space-y-4">
@@ -155,8 +155,8 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <p className="text-center text-blue-300 text-xs mt-4">
-          <Link href="/" className="hover:text-white transition">← Torna alla mappa</Link>
+        <p className="text-center text-blue-400 text-xs mt-4">
+          Safez — La tua sicurezza in città
         </p>
       </div>
     </div>

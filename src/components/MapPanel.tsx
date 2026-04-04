@@ -253,7 +253,11 @@ export default function MapPanel({
   const visibleReports = reports.filter((r) => showReports || isNearRoute(r.position, localDirections));
   const newsMarkers = newsAlerts
     .filter((a) => a.category !== "general")
-    .map((a, i) => ({ ...a, position: NEWS_POSITIONS[i % NEWS_POSITIONS.length] }))
+    .map((a, i) => ({
+      ...a,
+      // Use geocoded position if available, otherwise fall back to approximate positions
+      position: a.position || NEWS_POSITIONS[i % NEWS_POSITIONS.length],
+    }))
     .filter((a) => showReports || isNearRoute(a.position, localDirections));
 
   if (!isLoaded) {

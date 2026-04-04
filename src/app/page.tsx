@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { LatLng, Report, ReportType, NewsAlert, SAFETY_TYPES } from "@/lib/types";
 import { useGeolocation } from "@/lib/useGeolocation";
 import { fetchWeather, getWeatherAlert, WeatherData, WeatherAlert } from "@/lib/weather";
@@ -12,7 +13,7 @@ import { createAuthClient } from "@/lib/auth";
 import type { UserProfile } from "@/lib/auth";
 import RoutePanel from "@/components/RoutePanel";
 import WeatherBar from "@/components/WeatherBar";
-import BottomBar from "@/components/BottomBar";
+import ReportFAB from "@/components/ReportFAB";
 import Sidebar from "@/components/Sidebar";
 import SOSButton from "@/components/SOSButton";
 import GeolocationGate from "@/components/GeolocationGate";
@@ -32,6 +33,14 @@ interface FamilyMember {
 }
 
 export default function Home() {
+  const router = useRouter();
+
+  // Auth state — must be resolved before rendering map
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+
+  // Geolocation gate
   const [geoStarted, setGeoStarted] = useState(false);
   const { position, recenter, permissionState, requestPermission } = useGeolocation(!geoStarted);
 
@@ -63,15 +72,31 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherAlert, setWeatherAlert] = useState<WeatherAlert | null>(null);
 
-  // Auth
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [userId, setUserId] = useState<string | undefined>(undefined);
-
   // Family
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const familyIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check if geolocation was previously granted
+  // ── Auth check ────────────────────────────────────────────
+  useEffect(() => {
+    const supabase = createAuthClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserId(user.id);
+        supabase.from("profiles").select("*").eq("id", user.id).single()
+          .then(({ data }) => { if (data) setUserProfile(data as UserProfile); });
+      }
+      setAuthLoaded(true);
+    });
+  }, []);
+
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (authLoaded && !userId) {
+      router.replace("/auth/login");
+    }
+  }, [authLoaded, userId, router]);
+
+  // ── Geolocation persistence ───────────────────────────────
   useEffect(() => {
     const wasGranted = localStorage.getItem("geo_granted") === "1";
     if (wasGranted) { setGeoStarted(true); requestPermission(); }
@@ -83,26 +108,14 @@ export default function Home() {
     }
   }, [permissionState]);
 
-  // Load city
+  // ── City ─────────────────────────────────────────────────
   useEffect(() => {
     const stored = loadCityFromStorage();
     if (stored) setCity(stored);
     setCityLoaded(true);
   }, []);
 
-  // Auth
-  useEffect(() => {
-    const supabase = createAuthClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserId(user.id);
-        supabase.from("profiles").select("*").eq("id", user.id).single()
-          .then(({ data }) => { if (data) setUserProfile(data as UserProfile); });
-      }
-    });
-  }, []);
-
-  // Fetch reports when city changes
+  // ── Reports ───────────────────────────────────────────────
   useEffect(() => {
     if (!city?.id) return;
     const load = () => {
@@ -119,7 +132,7 @@ export default function Home() {
     return () => clearInterval(i);
   }, [city?.id]);
 
-  // Family location sharing + fetching
+  // ── Family location sharing ───────────────────────────────
   useEffect(() => {
     if (!userId || !city) return;
 
@@ -162,7 +175,7 @@ export default function Home() {
     return () => { if (familyIntervalRef.current) clearInterval(familyIntervalRef.current); };
   }, [userId, city?.id, position.lat, position.lng, permissionState]);
 
-  // Prune expired reports
+  // ── Prune expired reports ─────────────────────────────────
   useEffect(() => {
     const i = setInterval(() => {
       setReports(prev => prev.filter(r => isReportActive(r.confirms, r.denials, r.expiresAt)));
@@ -170,7 +183,7 @@ export default function Home() {
     return () => clearInterval(i);
   }, []);
 
-  // Weather
+  // ── Weather ───────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(async () => {
@@ -191,6 +204,7 @@ export default function Home() {
     return () => clearInterval(i);
   }, [position.lat, position.lng]);
 
+  // ── Handlers ──────────────────────────────────────────────
   const handleDirectionsChange = useCallback((result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => {
     setDirections(result);
     setRouteInfo(info);
@@ -198,7 +212,6 @@ export default function Home() {
 
   const handleReport = useCallback(async (type: ReportType) => {
     const sid = getSessionId();
-    // Exact user GPS position (no random offset)
     const pos: LatLng = { lat: position.lat, lng: position.lng };
     const tempId = `temp-${Date.now()}`;
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
@@ -250,7 +263,34 @@ export default function Home() {
     setRouteActive(false); setRouteInfo(null); setDirections(null); setRouteOpen(false);
   }, []);
 
-  // Geolocation gate: show if not yet started and no stored permission
+  // ── Render guards ─────────────────────────────────────────
+
+  // While checking auth show a loading screen
+  if (!authLoaded) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 bg-white rounded-3xl shadow-2xl flex items-center justify-center">
+            <span className="material-symbols-outlined text-blue-600 text-[36px]">shield</span>
+          </div>
+          <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" style={{ borderWidth: 3 }} />
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect handled by useEffect above; show nothing while navigating
+  if (!userId) return null;
+
+  if (!cityLoaded) return null;
+  if (!city && !showCitySelector) {
+    return <CitySelector onSelect={handleCitySelect} />;
+  }
+  if (showCitySelector) {
+    return <CitySelector onSelect={handleCitySelect} />;
+  }
+
+  const cityCenter: LatLng = { lat: city!.lat, lng: city!.lng };
   const showGeoGate = !geoStarted && permissionState !== "granted";
 
   const handleGeoAllow = () => {
@@ -263,19 +303,9 @@ export default function Home() {
     setGeoStarted(true);
   };
 
-  if (!cityLoaded) return null;
-  if (!city && !showCitySelector) {
-    return <CitySelector onSelect={handleCitySelect} />;
-  }
-  if (showCitySelector) {
-    return <CitySelector onSelect={handleCitySelect} />;
-  }
-
-  const cityCenter: LatLng = { lat: city!.lat, lng: city!.lng };
-
   return (
     <div className="h-screen w-screen relative overflow-hidden bg-gray-900">
-      {/* Geo permission gate */}
+      {/* Geo permission gate (overlay, map already visible behind) */}
       {showGeoGate && (
         <GeolocationGate onAllow={handleGeoAllow} onSkip={handleGeoSkip} />
       )}
@@ -379,7 +409,7 @@ export default function Home() {
       </div>
 
       {/* Map controls — right side */}
-      <div className="absolute right-3 z-20 flex flex-col gap-2" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)" }}>
+      <div className="absolute right-3 z-20 flex flex-col gap-2" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 100px)" }}>
         <button
           onClick={recenter}
           className="glass shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center hover:bg-white transition"
@@ -401,7 +431,7 @@ export default function Home() {
         </button>
       </div>
 
-      {/* SOS modal (triggered from BottomBar) */}
+      {/* SOS modal */}
       {showSOS && (
         <SOSButton
           userPosition={position}
@@ -412,9 +442,8 @@ export default function Home() {
         />
       )}
 
-      {/* Bottom bar */}
-      <BottomBar
-        userPosition={position}
+      {/* Floating report FAB + SOS pill */}
+      <ReportFAB
         onReport={handleReport}
         onSOSOpen={() => setShowSOS(true)}
       />
