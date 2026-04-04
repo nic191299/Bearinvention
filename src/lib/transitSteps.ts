@@ -41,9 +41,9 @@ export function getVehicleIcon(type = ""): string {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parseTransitSteps(directions: any): TransitStep[] {
-  if (!directions?.routes?.[0]?.legs?.[0]) return [];
-  const steps = directions.routes[0].legs[0].steps as any[];
+export function parseTransitSteps(directions: any, routeIndex = 0): TransitStep[] {
+  if (!directions?.routes?.[routeIndex]?.legs?.[0]) return [];
+  const steps = directions.routes[routeIndex].legs[0].steps as any[];
   const result: TransitStep[] = [];
   let lastArrivalTs: number | null = null;
 

@@ -77,6 +77,7 @@ export default function Home() {
 
   // Transit steps for NavHUD
   const [transitSteps, setTransitSteps] = useState<ReturnType<typeof parseTransitSteps>>([]);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
 
   // News
   const [newsAlerts, setNewsAlerts] = useState<NewsAlert[]>([]);
@@ -231,8 +232,18 @@ export default function Home() {
   const handleDirectionsChange = useCallback((result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => {
     setDirections(result);
     setRouteInfo(info);
-    setTransitSteps(result ? parseTransitSteps(result) : []);
+    setSelectedRouteIndex(0);
+    setTransitSteps(result ? parseTransitSteps(result, 0) : []);
   }, []);
+
+  const handleRouteSelect = useCallback((idx: number) => {
+    setSelectedRouteIndex(idx);
+    if (directions?.routes?.[idx]) {
+      const leg = directions.routes[idx].legs[0];
+      setRouteInfo(leg ? { distance: leg.distance?.text || "", duration: leg.duration?.text || "" } : null);
+      setTransitSteps(parseTransitSteps(directions, idx));
+    }
+  }, [directions]);
 
   const handleReport = useCallback(async (type: ReportType) => {
     const sid = getSessionId();
@@ -285,6 +296,7 @@ export default function Home() {
   const handleClear = useCallback(() => {
     setOrigin(null); setDestination(null); setOriginText(""); setDestText("");
     setRouteActive(false); setRouteInfo(null); setDirections(null); setRouteOpen(false);
+    setSelectedRouteIndex(0);
   }, []);
 
   // ── Render guards ─────────────────────────────────────────
@@ -358,6 +370,8 @@ export default function Home() {
         routeDestination={destination}
         routeMode={mode}
         routeActive={routeActive}
+        selectedRouteIndex={selectedRouteIndex}
+        onRouteSelect={handleRouteSelect}
         onVote={handleVote}
         familyMembers={familyMembers}
       />
@@ -437,6 +451,8 @@ export default function Home() {
             reports={reports}
             newsAlerts={newsAlerts}
             directions={directions}
+            selectedRouteIndex={selectedRouteIndex}
+            onRouteSelect={handleRouteSelect}
           />
         )}
 

@@ -86,6 +86,8 @@ interface MapPanelProps {
   routeDestination: LatLng | null;
   routeMode: string;
   routeActive: boolean;         // also controls news markers visibility
+  selectedRouteIndex?: number;
+  onRouteSelect?: (idx: number) => void;
   onVote: (reportId: string, vote: 1 | -1) => void;
   familyMembers?: FamilyMember[];
 }
@@ -106,6 +108,8 @@ export default function MapPanel({
   routeDestination,
   routeMode,
   routeActive,
+  selectedRouteIndex = 0,
+  onRouteSelect,
   onVote,
   familyMembers = [],
 }: MapPanelProps) {
@@ -479,13 +483,26 @@ export default function MapPanel({
         </InfoWindow>
       )}
 
-      {/* Directions */}
-      {localDirections && (
-        <DirectionsRenderer
-          directions={localDirections}
-          options={{ suppressMarkers: false, polylineOptions: { strokeColor: "#2563eb", strokeWeight: 5, strokeOpacity: 0.8 } }}
-        />
-      )}
+      {/* Directions — render all alternatives, highlight selected */}
+      {localDirections && localDirections.routes.map((_, routeIdx) => {
+        const isSelected = routeIdx === selectedRouteIndex;
+        return (
+          <DirectionsRenderer
+            key={`route-${routeIdx}`}
+            directions={localDirections}
+            options={{
+              routeIndex: routeIdx,
+              suppressMarkers: !isSelected,
+              polylineOptions: {
+                strokeColor: isSelected ? "#05C3B2" : "#94a3b8",
+                strokeWeight: isSelected ? 5 : 3,
+                strokeOpacity: isSelected ? 0.9 : 0.4,
+                zIndex: isSelected ? 10 : 1,
+              },
+            }}
+          />
+        );
+      })}
 
       {/* Family members */}
       {familyMembers.map((member) => {

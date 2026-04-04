@@ -16,6 +16,53 @@ function isNewsDangerous(n: NewsAlert): boolean {
   return CRIME_KEYWORDS.some(k => l.includes(k));
 }
 
+// ─── Route danger scorer ───────────────────────────────────────────────────────
+function haversineSimple(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+interface DangerScore { score: number; label: string; color: string; icon: string; }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function calcRouteDanger(route: any, reports: Report[], newsAlerts: NewsAlert[], threshold = 220): DangerScore {
+  // Collect all path points from the route's legs/steps
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pathPts: Array<{ lat: () => number; lng: () => number }> = [];
+  for (const leg of (route?.legs || [])) {
+    for (const step of (leg?.steps || [])) {
+      if (step.path) for (const p of step.path) pathPts.push(p);
+    }
+  }
+
+  const near = (pos: LatLng): boolean => {
+    for (const p of pathPts) {
+      if (haversineSimple(pos.lat, pos.lng, p.lat(), p.lng()) < threshold) return true;
+    }
+    return false;
+  };
+
+  let score = 0;
+  for (const r of reports) {
+    if (near(r.position)) {
+      score += r.type === "theft" || r.type === "harassment" ? 5
+             : r.type === "danger" ? 3
+             : r.type === "dark_street" ? 2 : 1;
+    }
+  }
+  for (const n of newsAlerts) {
+    if (isNewsDangerous(n) && n.position && near(n.position)) score += 8;
+  }
+
+  if (score === 0) return { score, label: "Sicuro", color: "#10b981", icon: "verified_user" };
+  if (score < 6)   return { score, label: "Basso rischio", color: "#84cc16", icon: "shield" };
+  if (score < 18)  return { score, label: "Attenzione", color: "#F0A500", icon: "warning" };
+  return             { score, label: "Alto rischio", color: "#ef4444", icon: "dangerous" };
+}
+
 // ─── Props ─────────────────────────────────────────────────────────────────────
 interface RoutePanelProps {
   origin: LatLng | null;
@@ -35,6 +82,8 @@ interface RoutePanelProps {
   newsAlerts?: NewsAlert[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   directions?: any;
+  selectedRouteIndex?: number;
+  onRouteSelect?: (idx: number) => void;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -43,6 +92,7 @@ export default function RoutePanel({
   onOriginSelect, onDestinationSelect, onModeChange,
   onUseMyLocation, onClear,
   apiLoaded, city, reports = [], newsAlerts = [], directions,
+  selectedRouteIndex = 0, onRouteSelect,
 }: RoutePanelProps) {
   const destRef        = useRef<HTMLInputElement>(null);
   const originInputRef = useRef<HTMLInputElement>(null);
@@ -178,21 +228,75 @@ export default function RoutePanel({
       {/* ── Route info ──────────────────────────────────────────────────────── */}
       {routeInfo && (
         <div className="px-3 pb-3 space-y-2 border-t border-white/30 pt-2.5">
-          {/* Duration row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
-                <span className="material-symbols-outlined text-[15px]" style={{ color: "#05C3B2" }}>schedule</span>
-                <span className="text-sm font-bold text-gray-800">{routeInfo.duration}</span>
+          {/* ── Route alternatives ─────────────────────────────────────── */}
+          {directions?.routes?.length > 1 ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Scegli percorso</span>
+                <button onClick={onClear} className="flex items-center gap-0.5 px-2 py-1 rounded-xl text-[11px] text-red-500 hover:bg-red-50 font-semibold transition">
+                  <span className="material-symbols-outlined text-[13px]">close</span>Annulla
+                </button>
               </div>
-              <span className="text-xs text-gray-400">{routeInfo.distance}</span>
+              {(directions.routes as any[]).map((route: any, idx: number) => {
+                const leg = route.legs?.[0];
+                const danger = calcRouteDanger(route, reports, newsAlerts);
+                const isSelected = idx === selectedRouteIndex;
+                return (
+                  <button key={idx} onClick={() => onRouteSelect?.(idx)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-2xl transition-all text-left active:scale-95"
+                    style={isSelected
+                      ? { border: "1.5px solid #05C3B2", background: "rgba(5,195,178,0.06)" }
+                      : { background: "#f8fafc", border: "1.5px solid transparent" }}
+                  >
+                    {/* Number badge */}
+                    <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs font-black"
+                      style={{ backgroundColor: isSelected ? "#05C3B2" : "#e2e8f0", color: isSelected ? "white" : "#64748b" }}>
+                      {idx + 1}
+                    </div>
+                    {/* Duration + distance */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[12px] font-black text-gray-800">{leg?.duration?.text || "–"}</span>
+                        <span className="text-[9px] text-gray-400">{leg?.distance?.text || ""}</span>
+                      </div>
+                    </div>
+                    {/* Danger badge */}
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg shrink-0"
+                      style={{ backgroundColor: danger.color + "18" }}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ color: danger.color }}>{danger.icon}</span>
+                      <span className="text-[9px] font-bold" style={{ color: danger.color }}>{danger.label}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            <button onClick={onClear}
-              className="flex items-center gap-0.5 px-2 py-1 rounded-xl text-[11px] text-red-500 hover:bg-red-50 font-semibold transition">
-              <span className="material-symbols-outlined text-[13px]">close</span>
-              Annulla
-            </button>
-          </div>
+          ) : (
+            /* Single route — show duration pill + cancel */
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
+                  <span className="material-symbols-outlined text-[15px]" style={{ color: "#05C3B2" }}>schedule</span>
+                  <span className="text-sm font-bold text-gray-800">{routeInfo.duration}</span>
+                </div>
+                <span className="text-xs text-gray-400">{routeInfo.distance}</span>
+                {/* Single route danger badge */}
+                {directions?.routes?.[0] && (() => {
+                  const d = calcRouteDanger(directions.routes[0], reports, newsAlerts);
+                  return (
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: d.color + "18" }}>
+                      <span className="material-symbols-outlined text-[11px]" style={{ color: d.color }}>{d.icon}</span>
+                      <span className="text-[9px] font-bold" style={{ color: d.color }}>{d.label}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+              <button onClick={onClear}
+                className="flex items-center gap-0.5 px-2 py-1 rounded-xl text-[11px] text-red-500 hover:bg-red-50 font-semibold transition">
+                <span className="material-symbols-outlined text-[13px]">close</span>
+                Annulla
+              </button>
+            </div>
+          )}
 
           {/* ── Transit itinerary ──────────────────────────────────────────── */}
           {hasTransit && (
