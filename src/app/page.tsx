@@ -11,9 +11,11 @@ import { getSessionId } from "@/lib/session";
 import { isReportActive } from "@/lib/geo";
 import { createAuthClient } from "@/lib/auth";
 import type { UserProfile } from "@/lib/auth";
+import { parseTransitSteps } from "@/lib/transitSteps";
 import RoutePanel from "@/components/RoutePanel";
 import WeatherBar from "@/components/WeatherBar";
 import ReportFAB from "@/components/ReportFAB";
+import NavHUD from "@/components/NavHUD";
 import Sidebar from "@/components/Sidebar";
 import SOSButton from "@/components/SOSButton";
 import GeolocationGate from "@/components/GeolocationGate";
@@ -68,6 +70,9 @@ export default function Home() {
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [routeOpen, setRouteOpen] = useState(false);
+
+  // Transit steps for NavHUD
+  const [transitSteps, setTransitSteps] = useState<ReturnType<typeof parseTransitSteps>>([]);
 
   // News
   const [newsAlerts, setNewsAlerts] = useState<NewsAlert[]>([]);
@@ -226,6 +231,7 @@ export default function Home() {
   const handleDirectionsChange = useCallback((result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => {
     setDirections(result);
     setRouteInfo(info);
+    setTransitSteps(result ? parseTransitSteps(result) : []);
   }, []);
 
   const handleReport = useCallback(async (type: ReportType) => {
@@ -462,6 +468,14 @@ export default function Home() {
           onClose={() => setShowSOS(false)}
         />
       )}
+
+      {/* Live navigation HUD — bottom left */}
+      <NavHUD
+        steps={transitSteps}
+        userPosition={position}
+        watching={watching}
+        routeActive={routeActive && mode === "TRANSIT"}
+      />
 
       {/* Floating report FAB + SOS pill */}
       <ReportFAB
