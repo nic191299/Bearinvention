@@ -379,7 +379,7 @@ export default function Home() {
           {/* Hamburger / brand mark */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="glass w-11 h-11 rounded-2xl shadow-lg flex items-center justify-center hover:bg-white transition shrink-0 overflow-hidden"
+            className="ctrl-ocean w-11 h-11 rounded-2xl flex items-center justify-center transition shrink-0 overflow-hidden active:scale-90"
           >
             <img src="/logo.svg" alt="Salvo" className="w-6 h-6" />
           </button>
@@ -407,8 +407,10 @@ export default function Home() {
           {weather && (
             <button
               onClick={() => setShowRadar(!showRadar)}
-              className="glass rounded-2xl shadow-lg h-11 px-3 flex items-center gap-1.5 shrink-0 transition"
-              style={showRadar ? { backgroundColor: "#05C3B2", color: "white" } : {}}
+              className="ctrl-ocean rounded-2xl h-11 px-3 flex items-center gap-1.5 shrink-0 transition active:scale-90"
+              style={showRadar
+                ? { backgroundColor: "#05C3B2", borderColor: "#05C3B2", color: "white" }
+                : { color: "rgba(255,255,255,0.85)" }}
             >
               <span className="material-symbols-outlined text-[18px]">{weather.precipitation > 0 ? "rainy" : "wb_sunny"}</span>
               <span className="text-xs font-bold">{Math.round(weather.temperature)}°</span>
@@ -448,26 +450,22 @@ export default function Home() {
       <div className="absolute right-3 z-20 flex flex-col gap-2" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 100px)" }}>
         <button
           onClick={recenter}
-          className="glass shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center hover:bg-white transition"
+          className="ctrl-ocean rounded-2xl w-11 h-11 flex items-center justify-center transition active:scale-90"
         >
           <span className="material-symbols-outlined text-[20px]" style={{ color: "#05C3B2" }}>my_location</span>
         </button>
         <button
           onClick={() => setShowHeatmap(!showHeatmap)}
-          className="shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition"
-          style={showHeatmap
-            ? { backgroundColor: "#ef4444", color: "white" }
-            : { background: "rgba(255,255,255,0.92)", backdropFilter: "blur(14px)" }}
+          className="ctrl-ocean rounded-2xl w-11 h-11 flex items-center justify-center transition active:scale-90"
+          style={showHeatmap ? { backgroundColor: "#ef4444", borderColor: "#ef4444" } : {}}
           title="Mappa pericoli"
         >
           <span className="material-symbols-outlined text-[20px]" style={{ color: showHeatmap ? "white" : "#ef4444" }}>local_fire_department</span>
         </button>
         <button
           onClick={() => setShowTraffic(!showTraffic)}
-          className="shadow-lg rounded-2xl w-11 h-11 flex items-center justify-center transition"
-          style={showTraffic
-            ? { backgroundColor: "#F0A500", color: "white" }
-            : { background: "rgba(255,255,255,0.92)", backdropFilter: "blur(14px)" }}
+          className="ctrl-ocean rounded-2xl w-11 h-11 flex items-center justify-center transition active:scale-90"
+          style={showTraffic ? { backgroundColor: "#F0A500", borderColor: "#F0A500" } : {}}
         >
           <span className="material-symbols-outlined text-[20px]" style={{ color: showTraffic ? "white" : "#F0A500" }}>traffic</span>
         </button>

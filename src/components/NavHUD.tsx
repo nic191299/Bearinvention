@@ -126,7 +126,16 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
       </div>
 
       {/* ── Current step card ─────────────────────────────────────────── */}
-      <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{
+          background: "rgba(6,24,38,0.93)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid rgba(5,195,178,0.18)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.45), 0 0 0 0px rgba(5,195,178,0.1)",
+        }}
+      >
 
         {/* ── WALKING ── */}
         {cur.mode === "WALKING" && (
@@ -140,13 +149,13 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               {/* Bar + time */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">A piedi</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.45)" }}>A piedi</span>
                   <span className="text-[12px] font-black text-[#05C3B2]">
                     {watching ? `${remainingMin} min` : cur.duration}
                   </span>
                 </div>
                 {/* Animated progress */}
-                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div
                     className="h-full rounded-full transition-all duration-[800ms] ease-out"
                     style={{
@@ -156,7 +165,7 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                   />
                 </div>
                 {cur.distance && (
-                  <div className="text-[9px] text-gray-400 mt-0.5 truncate">
+                  <div className="text-[9px] mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>
                     {watching && remainingM < 10000 ? `~${Math.round(remainingM)} m rimasti` : cur.distance}
                   </div>
                 )}
@@ -177,8 +186,8 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                     </span>
                   </div>
                 ) : (
-                  <div className="w-10 h-10 bg-red-50 rounded-2xl flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-red-400 text-[20px]">flag</span>
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: "rgba(239,68,68,0.15)" }}>
+                    <span className="material-symbols-outlined text-[20px]" style={{ color: "#ef4444" }}>flag</span>
                   </div>
                 )
               )}
@@ -186,9 +195,9 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
 
             {/* Next stop label */}
             {next?.mode === "TRANSIT" && (
-              <div className="flex items-center gap-1 mt-2 px-2 py-1.5 bg-gray-50 rounded-xl">
-                <span className="material-symbols-outlined text-[11px] text-gray-400">location_on</span>
-                <span className="text-[9px] text-gray-500 truncate">
+              <div className="flex items-center gap-1 mt-2 px-2 py-1.5 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <span className="material-symbols-outlined text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>location_on</span>
+                <span className="text-[9px] truncate" style={{ color: "rgba(255,255,255,0.55)" }}>
                   {next.departureStop}
                   {next.departureTime ? ` · parte ${next.departureTime}` : ""}
                 </span>
@@ -214,16 +223,16 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-bold text-gray-700 truncate">{cur.departureStop}</div>
-                <div className="text-[9px] text-gray-400 truncate">→ {cur.arrivalStop}</div>
+                <div className="text-[11px] font-bold truncate" style={{ color: "rgba(255,255,255,0.9)" }}>{cur.departureStop}</div>
+                <div className="text-[9px] truncate" style={{ color: "rgba(255,255,255,0.4)" }}>→ {cur.arrivalStop}</div>
               </div>
             </div>
 
             {/* Stops dot-track */}
             <div className="flex items-center gap-0.5 mb-2.5 px-1">
               {/* Departure dot */}
-              <div className="w-3 h-3 rounded-full shrink-0 border-2 border-white shadow-sm"
-                style={{ backgroundColor: cur.lineColor || "#3b82f6" }} />
+              <div className="w-3 h-3 rounded-full shrink-0 border-2 shadow-sm"
+                style={{ backgroundColor: cur.lineColor || "#05C3B2", borderColor: "rgba(255,255,255,0.2)" }} />
               {/* Track with stop dots */}
               <div className="flex-1 flex items-center">
                 <div className="flex-1 h-0.5" style={{ backgroundColor: (cur.lineColor || "#3b82f6") + "50" }} />
@@ -235,8 +244,8 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                 ))}
               </div>
               {/* Arrival dot */}
-              <div className="w-3 h-3 rounded-full shrink-0 border-2 bg-white shadow-sm"
-                style={{ borderColor: cur.lineColor || "#3b82f6" }} />
+              <div className="w-3 h-3 rounded-full shrink-0 border-2 shadow-sm"
+                style={{ backgroundColor: "rgba(6,24,38,0.9)", borderColor: cur.lineColor || "#05C3B2" }} />
             </div>
 
             {/* Time row */}
@@ -245,7 +254,7 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               {deptInMin !== null ? (
                 <div className="flex items-center gap-1 bg-[#05C3B2]/10 rounded-lg px-2 py-1 flex-1">
                   <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
-                  <span className="text-[10px] font-bold text-[#04A899]">
+                  <span className="text-[10px] font-bold text-[#05C3B2]">
                     {deptInMin <= 0 ? "In partenza" : `tra ${deptInMin} min`}
                   </span>
                   {cur.departureTime && (
@@ -255,25 +264,25 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               ) : cur.departureTime ? (
                 <div className="flex items-center gap-1 bg-[#05C3B2]/10 rounded-lg px-2 py-1">
                   <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
-                  <span className="text-[10px] font-bold text-[#04A899]">{cur.departureTime}</span>
+                  <span className="text-[10px] font-bold text-[#05C3B2]">{cur.departureTime}</span>
                 </div>
               ) : null}
 
               {/* Stops count */}
               {cur.numStops ? (
-                <div className="flex items-center gap-0.5 bg-gray-50 rounded-lg px-2 py-1">
-                  <span className="material-symbols-outlined text-gray-400 text-[11px]">radio_button_checked</span>
-                  <span className="text-[10px] text-gray-500">{cur.numStops} fermate</span>
+                <div className="flex items-center gap-0.5 rounded-lg px-2 py-1" style={{ background: "rgba(255,255,255,0.07)" }}>
+                  <span className="material-symbols-outlined text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>radio_button_checked</span>
+                  <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.55)" }}>{cur.numStops} fermate</span>
                 </div>
               ) : null}
             </div>
 
             {/* Arrival time */}
             {cur.arrivalTime && (
-              <div className="flex items-center gap-1 mt-1.5 px-2 py-1 bg-gray-50 rounded-xl">
-                <span className="material-symbols-outlined text-[10px] text-gray-400">flag</span>
-                <span className="text-[9px] text-gray-500">
-                  Arriva {cur.arrivalTime} a <span className="font-semibold">{cur.arrivalStop}</span>
+              <div className="flex items-center gap-1 mt-1.5 px-2 py-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <span className="material-symbols-outlined text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>flag</span>
+                <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.55)" }}>
+                  Arriva {cur.arrivalTime} a <span className="font-bold" style={{ color: "rgba(255,255,255,0.8)" }}>{cur.arrivalStop}</span>
                 </span>
               </div>
             )}

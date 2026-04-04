@@ -21,7 +21,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-geist)", "Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["Nunito", "system-ui", "-apple-system", "sans-serif"],
       },
       borderRadius: {
         "2xl": "1rem",
