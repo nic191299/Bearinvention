@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { LatLng, Report, ReportType, NewsAlert, SAFETY_TYPES } from "@/lib/types";
 import { useGeolocation } from "@/lib/useGeolocation";
@@ -12,6 +12,7 @@ import { isReportActive } from "@/lib/geo";
 import { createAuthClient } from "@/lib/auth";
 import type { UserProfile } from "@/lib/auth";
 import { parseTransitSteps } from "@/lib/transitSteps";
+import { getNeighbourhoods } from "@/lib/neighbourhoods";
 import RoutePanel from "@/components/RoutePanel";
 import RouteBottomSheet from "@/components/RouteBottomSheet";
 import WeatherBar from "@/components/WeatherBar";
@@ -80,6 +81,9 @@ export default function Home() {
   const [transitSteps, setTransitSteps] = useState<ReturnType<typeof parseTransitSteps>>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [showRouteSheet, setShowRouteSheet] = useState(false);
+  const [navMode, setNavMode] = useState(false);
+  const [dangerAlert, setDangerAlert] = useState<string | null>(null);
+  const dangerAlertRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // News
   const [newsAlerts, setNewsAlerts] = useState<NewsAlert[]>([]);
@@ -230,6 +234,58 @@ export default function Home() {
     return () => clearInterval(i);
   }, [position.lat, position.lng]);
 
+  // ── Danger zone detection (nav mode) ─────────────────────
+  const lastDangerCheckRef = useRef(0);
+  useEffect(() => {
+    if (!navMode || !city) return;
+    const now = Date.now();
+    if (now - lastDangerCheckRef.current < 12000) return;
+    lastDangerCheckRef.current = now;
+    const hoods = getNeighbourhoods(city.name);
+    const R = 6371000;
+    for (const n of hoods) {
+      const dLat = ((n.lat - position.lat) * Math.PI) / 180;
+      const dLng = ((n.lng - position.lng) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos((position.lat * Math.PI) / 180) * Math.cos((n.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      if (dist < n.radius) {
+        let score = 0;
+        for (const r of reports) {
+          const dd = ((r.position.lat - n.lat) ** 2 + (r.position.lng - n.lng) ** 2) ** 0.5 * 111000;
+          if (dd < n.radius) score += r.type === "theft" || r.type === "harassment" ? 5 : r.type === "danger" ? 3 : 1;
+        }
+        for (const na of newsAlerts) {
+          if ((na.category === "crime" || na.category === "transport") && na.position) {
+            const dd = ((na.position.lat - n.lat) ** 2 + (na.position.lng - n.lng) ** 2) ** 0.5 * 111000;
+            if (dd < n.radius) score += 8;
+          }
+        }
+        if (score >= 6) {
+          const msg = `Stai entrando in ${n.name}${score >= 15 ? " — zona ad alto rischio" : " — zona a rischio"}`;
+          setDangerAlert(msg);
+          if (dangerAlertRef.current) clearTimeout(dangerAlertRef.current);
+          dangerAlertRef.current = setTimeout(() => setDangerAlert(null), 6000);
+          break;
+        }
+      }
+    }
+  }, [position.lat, position.lng, navMode]);
+
+  // ── ETA (computed once, shown in nav bar) ─────────────────
+  const etaTime = useMemo(() => {
+    if (!routeInfo?.duration) return null;
+    // Try last transit step arrival timestamp first
+    const lastStep = transitSteps[transitSteps.length - 1];
+    if (lastStep?.arrivalTimestamp) {
+      return new Date(lastStep.arrivalTimestamp * 1000).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    }
+    // Fallback: parse duration string
+    const h = parseInt((routeInfo.duration.match(/(\d+)\s*or[ae]/) || [])[1] || "0");
+    const m = parseInt((routeInfo.duration.match(/(\d+)\s*min/) || [])[1] || "0");
+    const eta = new Date(Date.now() + (h * 60 + m) * 60000);
+    return eta.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  }, [routeInfo, transitSteps]);
+
   // ── Handlers ──────────────────────────────────────────────
   const handleDirectionsChange = useCallback((result: google.maps.DirectionsResult | null, info: { distance: string; duration: string } | null) => {
     setDirections(result);
@@ -298,7 +354,7 @@ export default function Home() {
   const handleClear = useCallback(() => {
     setOrigin(null); setDestination(null); setOriginText(""); setDestText("");
     setRouteActive(false); setRouteInfo(null); setDirections(null); setRouteOpen(false);
-    setSelectedRouteIndex(0); setShowRouteSheet(false);
+    setSelectedRouteIndex(0); setShowRouteSheet(false); setNavMode(false); setDangerAlert(null);
   }, []);
 
   // ── Render guards ─────────────────────────────────────────
@@ -377,6 +433,7 @@ export default function Home() {
         onRouteSelect={handleRouteSelect}
         onVote={handleVote}
         familyMembers={familyMembers}
+        navMode={navMode}
       />
 
       {/* Sidebar */}
@@ -515,13 +572,76 @@ export default function Home() {
         onSOSOpen={() => setShowSOS(true)}
       />
 
+      {/* ── Nav mode: danger zone alert ─────────────────────── */}
+      {navMode && dangerAlert && (
+        <div
+          className="fixed z-[85] left-0 right-0 flex justify-center animate-fade-in-up"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 110px)" }}
+        >
+          <div
+            className="flex items-center gap-2.5 px-4 py-3 rounded-2xl mx-4"
+            style={{
+              background: "rgba(239,68,68,0.95)",
+              backdropFilter: "blur(16px)",
+              boxShadow: "0 4px 24px rgba(239,68,68,0.5)",
+              border: "1px solid rgba(255,255,255,0.15)",
+            }}
+          >
+            <span className="material-symbols-outlined text-white text-[20px]">warning</span>
+            <span className="text-white font-bold text-sm">{dangerAlert}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Nav mode: ETA bottom bar ─────────────────────────── */}
+      {navMode && routeInfo && etaTime && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-[80] flex justify-center px-4"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)" }}
+        >
+          <div
+            className="flex items-center gap-4 px-5 py-3 rounded-2xl w-full max-w-sm"
+            style={{
+              background: "rgba(6,24,38,0.93)",
+              backdropFilter: "blur(28px) saturate(180%)",
+              WebkitBackdropFilter: "blur(28px) saturate(180%)",
+              border: "1px solid rgba(5,195,178,0.2)",
+              boxShadow: "0 -4px 32px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.4)",
+            }}
+          >
+            {/* ETA */}
+            <div className="flex flex-col items-center shrink-0">
+              <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "rgba(5,195,178,0.7)" }}>Arrivo</span>
+              <span className="text-white font-black text-2xl leading-none">{etaTime}</span>
+            </div>
+            {/* Divider */}
+            <div className="w-px self-stretch rounded-full" style={{ background: "rgba(255,255,255,0.12)" }} />
+            {/* Route info + dest */}
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                {routeInfo.duration} · {routeInfo.distance}
+              </div>
+              <div className="text-sm font-bold text-white truncate">{destText}</div>
+            </div>
+            {/* Stop nav */}
+            <button
+              onClick={handleClear}
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)" }}
+            >
+              <span className="material-symbols-outlined text-[18px]" style={{ color: "#ef4444" }}>close</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Waze-style full-screen route picker */}
       {showRouteSheet && directions && (
         <RouteBottomSheet
           directions={directions}
           selectedRouteIndex={selectedRouteIndex}
           onRouteSelect={handleRouteSelect}
-          onConfirm={() => setShowRouteSheet(false)}
+          onConfirm={() => { setShowRouteSheet(false); setNavMode(true); }}
           onDismiss={handleClear}
           reports={reports}
           newsAlerts={newsAlerts}

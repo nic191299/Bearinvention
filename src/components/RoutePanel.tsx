@@ -10,10 +10,10 @@ import { TransitStep, parseTransitSteps, getVehicleIcon } from "@/lib/transitSte
 interface NewsWarning { title: string; source: string; }
 
 const CRIME_KEYWORDS = ["borseggio","furto","rapina","scippo","aggressione","violenza","stupro","molestie","accoltellamento","rissa","spaccio"];
-function isNewsDangerous(n: NewsAlert): boolean {
-  if (n.category === "crime") return true;
-  const l = n.title.toLowerCase();
-  return CRIME_KEYWORDS.some(k => l.includes(k));
+function newsWeight(n: NewsAlert): number {
+  if (n.category === "crime" || CRIME_KEYWORDS.some(k => n.title.toLowerCase().includes(k))) return 8;
+  if (n.category === "transport" || n.category === "road_closure") return 3;
+  return 0;
 }
 
 // ─── Route danger scorer ───────────────────────────────────────────────────────
@@ -54,7 +54,8 @@ function calcRouteDanger(route: any, reports: Report[], newsAlerts: NewsAlert[],
     }
   }
   for (const n of newsAlerts) {
-    if (isNewsDangerous(n) && n.position && near(n.position)) score += 8;
+    const w = newsWeight(n);
+    if (w > 0 && n.position && near(n.position)) score += w;
   }
 
   if (score === 0) return { score, label: "Sicuro", color: "#10b981", icon: "verified_user" };
@@ -150,8 +151,8 @@ export default function RoutePanel({
     rw.sort((a, b) => (SAFETY_TYPES.includes(a.type as never) ? -1 : 1) - (SAFETY_TYPES.includes(b.type as never) ? -1 : 1));
     setReportWarnings(rw);
 
-    const geocoded = newsAlerts.filter(n => isNewsDangerous(n) && n.position && inBox(n.position));
-    const nonGeo   = newsAlerts.filter(n => isNewsDangerous(n) && !n.position).slice(0, 2);
+    const geocoded = newsAlerts.filter(n => newsWeight(n) > 0 && n.position && inBox(n.position));
+    const nonGeo   = newsAlerts.filter(n => newsWeight(n) > 0 && !n.position).slice(0, 2);
     setNewsWarnings([...geocoded, ...nonGeo].slice(0, 4).map(n => ({
       title: n.title.length > 72 ? n.title.slice(0, 72) + "…" : n.title,
       source: n.source,

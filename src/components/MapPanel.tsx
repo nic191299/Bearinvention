@@ -43,14 +43,23 @@ function neighbourhoodDanger(n: Neighbourhood, reports: Report[], newsAlerts: Ne
     }
   }
   for (const news of newsAlerts) {
-    if (news.category === "crime" && news.position) {
-      if (haversine(news.position.lat, news.position.lng, n.lat, n.lng) < thresh) score += 8;
-    }
+    if (!news.position) continue;
+    const w = news.category === "crime" ? 8 : news.category === "transport" || news.category === "road_closure" ? 3 : 0;
+    if (w > 0 && haversine(news.position.lat, news.position.lng, n.lat, n.lng) < thresh) score += w;
   }
   if (score === 0)  return { fillColor: "#10b981", fillOpacity: 0.06,  strokeColor: "#10b981" };
   if (score < 6)   return { fillColor: "#facc15", fillOpacity: 0.15,  strokeColor: "#facc15" };
   if (score < 15)  return { fillColor: "#f97316", fillOpacity: 0.22,  strokeColor: "#f97316" };
   return                   { fillColor: "#ef4444", fillOpacity: 0.28,  strokeColor: "#ef4444" };
+}
+
+function computeBearing(from: LatLng, to: LatLng): number {
+  const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 function isNearRoute(point: LatLng, result: google.maps.DirectionsResult | null, threshold = 200): boolean {
@@ -113,6 +122,7 @@ interface MapPanelProps {
   onRouteSelect?: (idx: number) => void;
   onVote: (reportId: string, vote: 1 | -1) => void;
   familyMembers?: FamilyMember[];
+  navMode?: boolean;
 }
 
 export default function MapPanel({
@@ -136,6 +146,7 @@ export default function MapPanel({
   onRouteSelect,
   onVote,
   familyMembers = [],
+  navMode = false,
 }: MapPanelProps) {
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: apiKey, libraries });
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -150,6 +161,7 @@ export default function MapPanel({
   const [votedReports, setVotedReports] = useState<Set<string>>(new Set());
   const [selectedFamily, setSelectedFamily] = useState<FamilyMember | null>(null);
   const [zoom, setZoom] = useState(14);
+  const prevPosRef = useRef<LatLng | null>(null);
 
   const center = cityCenter || userPosition;
 
@@ -181,6 +193,33 @@ export default function MapPanel({
       mapRef.current.setZoom(15);
     }
   }, [userWatching, userPosition]);
+
+  // ── Nav mode: Waze-style 3D camera follow ─────────────────────────────────
+  useEffect(() => {
+    if (!navMode || !mapRef.current || !userWatching) return;
+    const map = mapRef.current;
+    let bearing = 0;
+    if (prevPosRef.current) {
+      const dist = haversine(prevPosRef.current.lat, prevPosRef.current.lng, userPosition.lat, userPosition.lng);
+      if (dist > 2) bearing = computeBearing(prevPosRef.current, userPosition);
+      else bearing = (map.getHeading() || 0); // keep current heading when nearly still
+    }
+    prevPosRef.current = userPosition;
+    map.panTo(userPosition);
+    map.setZoom(17);
+    map.setTilt(45);
+    map.setHeading(bearing);
+  }, [navMode, userPosition, userWatching]);
+
+  // Reset camera when leaving nav mode
+  useEffect(() => {
+    if (navMode || !mapRef.current) return;
+    const map = mapRef.current;
+    map.setTilt(0);
+    map.setHeading(0);
+    map.setZoom(14);
+    prevPosRef.current = null;
+  }, [navMode]);
 
   // Weather zones
   useEffect(() => {

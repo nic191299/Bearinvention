@@ -38,8 +38,10 @@ function calcDanger(route: any, reports: Report[], newsAlerts: NewsAlert[]): Dan
     if (near(r.position)) score += r.type === "theft" || r.type === "harassment" ? 5 : r.type === "danger" ? 3 : r.type === "dark_street" ? 2 : 1;
   }
   for (const n of newsAlerts) {
-    const isDangerous = n.category === "crime" || CRIME_KEYWORDS.some(k => n.title.toLowerCase().includes(k));
-    if (isDangerous && n.position && near(n.position)) score += 8;
+    if (!n.position) continue;
+    const w = n.category === "crime" || CRIME_KEYWORDS.some(k => n.title.toLowerCase().includes(k)) ? 8
+            : n.category === "transport" || n.category === "road_closure" ? 3 : 0;
+    if (w > 0 && near(n.position)) score += w;
   }
   const pct = Math.min(100, Math.round((score / 30) * 100));
   if (score === 0) return { score, pct: 2, label: "Sicuro", color: "#10b981" };

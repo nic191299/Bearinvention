@@ -13,6 +13,12 @@ export function useGeolocation(lazy = false) {
   const [started, setStarted] = useState(!lazy);
   const watchIdRef = useRef<number | null>(null);
 
+  // When parent flips lazy from true → false (e.g. returning user / after grant),
+  // immediately start watching without needing a button press.
+  useEffect(() => {
+    if (!lazy) setStarted(true);
+  }, [lazy]);
+
   // Check permission state (without triggering browser prompt)
   useEffect(() => {
     if (!navigator.permissions) return;

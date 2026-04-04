@@ -32,7 +32,7 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose, city, onCityChange }: SidebarProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<"community" | "news">("community");
+  const [tab, setTab] = useState<"community" | "news" | "famiglia">("community");
   const [reports, setReports] = useState<DbReport[]>([]);
   const [comments, setComments] = useState<DbComment[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -43,6 +43,8 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
   const [showFamilyPanel, setShowFamilyPanel] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [joiningFamily, setJoiningFamily] = useState(false);
+  const [familyError, setFamilyError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const supabase = createAuthClient();
   const loaded = useRef(false);
 
@@ -93,22 +95,36 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
 
   const createFamily = async () => {
     if (!user) { router.push("/auth/login"); return; }
+    setFamilyError(null);
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const { data } = await supabase.from("family_groups")
+    const { data, error } = await supabase.from("family_groups")
       .upsert({ owner_id: user.id, invite_code: code, name: `Famiglia di ${profile?.full_name || "Utente"}` }, { onConflict: "owner_id" })
       .select("invite_code").single();
+    if (error) { setFamilyError("Errore creazione: " + error.message); return; }
     if (data) setFamilyCode(data.invite_code);
   };
 
   const joinFamily = async () => {
     if (!user || !inviteCode.trim()) return;
     setJoiningFamily(true);
+    setFamilyError(null);
     const { data: group } = await supabase.from("family_groups").select("id, owner_id").eq("invite_code", inviteCode.trim().toUpperCase()).maybeSingle();
-    if (!group) { alert("Codice non valido"); setJoiningFamily(false); return; }
-    await supabase.from("family_members").upsert({ group_id: group.id, user_id: user.id, display_name: profile?.full_name || "Membro", avatar_color: "#3b82f6" }, { onConflict: "group_id,user_id" });
-    alert("Ti sei unito alla famiglia!");
+    if (!group) { setFamilyError("Codice non valido — controlla e riprova"); setJoiningFamily(false); return; }
+    const { error } = await supabase.from("family_members").upsert(
+      { group_id: group.id, user_id: user.id, display_name: profile?.full_name || "Membro", avatar_color: "#3b82f6" },
+      { onConflict: "group_id,user_id" }
+    );
+    if (error) { setFamilyError("Errore: " + error.message); setJoiningFamily(false); return; }
     setJoiningFamily(false);
-    setShowFamilyPanel(false);
+    setInviteCode("");
+    setFamilyError(null);
+  };
+
+  const copyCode = () => {
+    if (!familyCode) return;
+    navigator.clipboard.writeText(familyCode).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const shareInviteLink = () => {
@@ -117,8 +133,9 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
     if (navigator.share) {
       navigator.share({ title: "Unisciti alla mia famiglia su Salvo", url });
     } else {
-      navigator.clipboard.writeText(url);
-      alert("Link copiato!");
+      navigator.clipboard.writeText(url).catch(() => {});
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -179,16 +196,17 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
           {[
             { key: "community", icon: "shield", label: "Community" },
             { key: "news", icon: "newspaper", label: "Notizie" },
+            { key: "famiglia", icon: "family_restroom", label: "Famiglia" },
           ].map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key as typeof tab)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold border-b-2 transition"
+              className="flex-1 flex items-center justify-center gap-1 py-3 text-[11px] font-semibold border-b-2 transition"
               style={tab === t.key
                 ? { borderColor: "#05C3B2", color: "#05C3B2" }
                 : { borderColor: "transparent", color: "#9ca3af" }}
             >
-              <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+              <span className="material-symbols-outlined text-[15px]">{t.icon}</span>
               {t.label}
               {t.key === "community" && activeReports.length > 0 && (
                 <span className="bg-red-500 text-white text-[9px] px-1 py-0.5 rounded-full font-bold">{activeReports.length}</span>
@@ -260,73 +278,18 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
                     )}
                   </div>
 
-                  {/* Family section */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[12px] text-purple-500">family_restroom</span>
-                        Famiglia
-                      </h3>
-                      <button onClick={() => setShowFamilyPanel(!showFamilyPanel)} className="text-[10px] text-purple-600">
-                        {showFamilyPanel ? "Chiudi" : "Gestisci"}
-                      </button>
+                  {/* Family teaser */}
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer"
+                    style={{ background: "linear-gradient(135deg,#f3e8ff,#ede9fe)" }}
+                    onClick={() => setTab("famiglia")}
+                  >
+                    <span className="material-symbols-outlined text-purple-500 text-[22px]">family_restroom</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-purple-800">Famiglia</div>
+                      <div className="text-[10px] text-purple-500">{familyCode ? `Codice: ${familyCode}` : "Crea o unisciti a un gruppo →"}</div>
                     </div>
-
-                    {showFamilyPanel && (
-                      <div className="bg-purple-50 rounded-xl p-3 space-y-3 border border-purple-100">
-                        {user ? (
-                          <>
-                            {/* Own invite code */}
-                            <div>
-                              <div className="text-[10px] font-semibold text-purple-700 mb-1">Il tuo codice invito</div>
-                              {familyCode ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 bg-white rounded-lg px-3 py-2 text-sm font-mono font-bold text-purple-700 text-center border border-purple-200">
-                                    {familyCode}
-                                  </div>
-                                  <button onClick={shareInviteLink} className="w-9 h-9 bg-purple-600 text-white rounded-lg flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-[16px]">share</span>
-                                  </button>
-                                </div>
-                              ) : (
-                                <button onClick={createFamily} className="w-full py-2 bg-purple-600 text-white text-xs font-semibold rounded-lg">
-                                  Crea gruppo famiglia
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Join by code */}
-                            <div>
-                              <div className="text-[10px] font-semibold text-purple-700 mb-1">Entra in un gruppo</div>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={inviteCode}
-                                  onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                                  placeholder="Codice invito"
-                                  maxLength={8}
-                                  className="flex-1 px-3 py-2 bg-white rounded-lg text-xs font-mono border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400 uppercase"
-                                />
-                                <button
-                                  onClick={joinFamily}
-                                  disabled={joiningFamily || inviteCode.length < 6}
-                                  className="px-3 py-2 bg-purple-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50"
-                                >
-                                  {joiningFamily ? "..." : "Entra"}
-                                </button>
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-center">
-                            <p className="text-xs text-gray-500 mb-2">Accedi per usare la condivisione in famiglia</p>
-                            <Link href="/auth/login" onClick={onClose} className="text-xs text-purple-600 font-semibold">
-                              Accedi →
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <span className="material-symbols-outlined text-purple-400 text-[16px]">chevron_right</span>
                   </div>
                 </div>
               )}
@@ -364,6 +327,106 @@ export default function Sidebar({ open, onClose, city, onCityChange }: SidebarPr
                         </a>
                       );
                     })
+                  )}
+                </div>
+              )}
+
+              {/* Famiglia tab */}
+              {tab === "famiglia" && (
+                <div className="p-4 space-y-4">
+                  {!user ? (
+                    <div className="text-center py-8">
+                      <span className="material-symbols-outlined text-[40px] text-purple-200 block mb-3">family_restroom</span>
+                      <p className="text-sm text-gray-500 mb-3">Accedi per usare la condivisione di posizione con la famiglia</p>
+                      <Link href="/auth/login" onClick={onClose} className="inline-block px-4 py-2 rounded-xl text-sm font-bold text-white" style={{ background: "#05C3B2" }}>
+                        Accedi →
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Error banner */}
+                      {familyError && (
+                        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
+                          <span className="material-symbols-outlined text-red-500 text-[14px]">error</span>
+                          <span className="text-xs text-red-600">{familyError}</span>
+                        </div>
+                      )}
+
+                      {/* My invite code */}
+                      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid #e9d5ff" }}>
+                        <div className="px-4 py-3" style={{ background: "linear-gradient(135deg,#f3e8ff,#ede9fe)" }}>
+                          <div className="text-xs font-bold text-purple-800 mb-0.5">Il tuo codice famiglia</div>
+                          <div className="text-[10px] text-purple-500">Condividilo con chi vuoi aggiungere</div>
+                        </div>
+                        <div className="px-4 py-3 bg-white">
+                          {familyCode ? (
+                            <>
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="flex-1 text-center py-3 rounded-xl font-mono font-black text-2xl tracking-widest text-purple-700" style={{ background: "#f5f3ff", letterSpacing: "0.2em" }}>
+                                  {familyCode}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={copyCode}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition"
+                                  style={{ background: copied ? "#10b981" : "#ede9fe", color: copied ? "white" : "#7c3aed" }}
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">{copied ? "check" : "content_copy"}</span>
+                                  {copied ? "Copiato!" : "Copia"}
+                                </button>
+                                <button
+                                  onClick={shareInviteLink}
+                                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white"
+                                  style={{ background: "#7c3aed" }}
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">share</span>
+                                  Condividi
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <button
+                              onClick={createFamily}
+                              className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                              style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)" }}
+                            >
+                              <span className="material-symbols-outlined text-[18px]">add</span>
+                              Crea il tuo gruppo famiglia
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Join by code */}
+                      <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e7eb" }}>
+                        <div className="px-4 py-3 bg-gray-50">
+                          <div className="text-xs font-bold text-gray-700">Entra in un gruppo</div>
+                          <div className="text-[10px] text-gray-400">Inserisci il codice che ti hanno condiviso</div>
+                        </div>
+                        <div className="px-4 py-3 bg-white">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={inviteCode}
+                              onChange={e => { setInviteCode(e.target.value.toUpperCase()); setFamilyError(null); }}
+                              placeholder="es. AB12CD34"
+                              maxLength={8}
+                              className="flex-1 px-3 py-2.5 bg-gray-50 rounded-xl text-sm font-mono font-bold border border-gray-200 focus:outline-none focus:ring-2 focus:border-transparent uppercase tracking-widest"
+                              style={{ "--tw-ring-color": "#7c3aed" } as React.CSSProperties}
+                            />
+                            <button
+                              onClick={joinFamily}
+                              disabled={joiningFamily || inviteCode.length < 6}
+                              className="px-4 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition"
+                              style={{ background: "#7c3aed" }}
+                            >
+                              {joiningFamily ? "..." : "Entra"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
               )}
