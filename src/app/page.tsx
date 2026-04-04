@@ -16,6 +16,8 @@ import ReportIcons from "@/components/ReportIcons";
 import ChatBot from "@/components/ChatBot";
 import SOSButton from "@/components/SOSButton";
 import CitySelector from "@/components/CitySelector";
+import AuthButton from "@/components/AuthButton";
+import type { UserProfile } from "@/lib/auth";
 
 const MapPanel = dynamic(() => import("@/components/MapPanel"), { ssr: false });
 
@@ -24,6 +26,8 @@ const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 export default function Home() {
   const { position, recenter } = useGeolocation();
   const [city, setCity] = useState<CityInfo | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
   const [cityLoaded, setCityLoaded] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -281,7 +285,7 @@ export default function Home() {
       >
         <span className="material-symbols-outlined text-[22px]">smart_toy</span>
       </button>
-      <SOSButton userPosition={position} />
+      <SOSButton userPosition={position} userProfile={userProfile} userId={userId} />
 
       {/* BRANDING + City selector shortcut */}
       <div className="absolute top-3 left-3 z-10 glass rounded-xl shadow-lg px-3 py-2 flex items-center gap-2">
@@ -296,6 +300,15 @@ export default function Home() {
             {city.name}
           </button>
         </div>
+      </div>
+
+      {/* AUTH button — top right */}
+      <div className="absolute top-3 right-3 z-10">
+        <AuthButton onProfileLoad={(p) => {
+          setUserProfile(p);
+          // get user id from auth (AuthButton handles this internally, expose via profile)
+          if (p) setUserId((p as UserProfile & { id: string }).id);
+        }} />
       </div>
 
       {/* Community button */}
