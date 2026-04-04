@@ -212,12 +212,20 @@ export default function MapPanel({
       const url = getRadarTileUrl(latest, 256);
       const layer = new google.maps.ImageMapType({
         getTileUrl: (coord, z) => {
-          const cz = Math.min(z, 12);
+          // RainViewer free tier supports up to zoom 6 natively.
+          // For higher zoom levels, scale coordinates to the parent zoom-6 tile.
+          const maxNativeZ = 6;
+          const cz = Math.min(z, maxNativeZ);
           const scale = Math.pow(2, z - cz);
-          return url.replace("{z}", String(cz)).replace("{x}", String(Math.floor(coord.x / scale))).replace("{y}", String(Math.floor(coord.y / scale)));
+          return url
+            .replace("{z}", String(cz))
+            .replace("{x}", String(Math.floor(coord.x / scale)))
+            .replace("{y}", String(Math.floor(coord.y / scale)));
         },
         tileSize: new google.maps.Size(256, 256),
-        opacity: 0.5,
+        minZoom: 0,
+        maxZoom: 18,
+        opacity: 0.55,
         name: "Radar",
       });
       mapRef.current.overlayMapTypes.push(layer);
