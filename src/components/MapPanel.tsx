@@ -55,6 +55,22 @@ function neighbourhoodDanger(n: Neighbourhood, reports: Report[], newsAlerts: Ne
   return                   { fillColor: "#ef4444", fillOpacity: 0.28,  strokeColor: "#ef4444" };
 }
 
+// Point N metres ahead of pos in the given heading — used to put user
+// in the lower part of the viewport during navigation.
+function lookAheadPoint(pos: LatLng, headingDeg: number, distanceM: number): LatLng {
+  const R = 6371000;
+  const d = distanceM / R;
+  const h = (headingDeg * Math.PI) / 180;
+  const lat1 = (pos.lat * Math.PI) / 180;
+  const lng1 = (pos.lng * Math.PI) / 180;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(h));
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(h) * Math.sin(d) * Math.cos(lat1),
+    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+  );
+  return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI };
+}
+
 function computeBearing(from: LatLng, to: LatLng): number {
   const dLng = ((to.lng - from.lng) * Math.PI) / 180;
   const lat1 = (from.lat * Math.PI) / 180;
@@ -197,14 +213,14 @@ export default function MapPanel({
     }
   }, [navMode, userWatching, userPosition]);
 
-  // ── Nav mode: Waze-style 3D camera (hybrid mapType enables tilt) ───────────
+  // ── Nav mode: Waze-style camera ───────────────────────────────────────────
+  // Perspective tilt is handled entirely by CSS transform on the container div.
+  // Here we handle: heading rotation (setHeading works on roadmap), zoom,
+  // and panning to a look-ahead point so the user's dot sits near the bottom.
   useEffect(() => {
     if (!navMode || !mapRef.current) return;
     const map = mapRef.current;
-    // Switch to hybrid for 3D tilt support
-    map.setMapTypeId(google.maps.MapTypeId.HYBRID);
     map.setZoom(18);
-    map.setTilt(67.5); // Waze-like steep angle
 
     if (!userWatching) return;
     let bearing = map.getHeading() || 0;
@@ -213,16 +229,16 @@ export default function MapPanel({
       if (dist > 3) bearing = computeBearing(prevPosRef.current, userPosition);
     }
     prevPosRef.current = { ...userPosition };
-    map.panTo(userPosition);
     map.setHeading(bearing);
+    // Pan to a point 120m ahead so the user's indicator sits at the bottom
+    const ahead = lookAheadPoint(userPosition, bearing, 120);
+    map.panTo(ahead);
   }, [navMode, userPosition, userWatching]);
 
   // Reset camera when leaving nav mode
   useEffect(() => {
     if (navMode || !mapRef.current) return;
     const map = mapRef.current;
-    map.setMapTypeId(google.maps.MapTypeId.ROADMAP);
-    map.setTilt(0);
     map.setHeading(0);
     map.setZoom(14);
     prevPosRef.current = null;
@@ -456,28 +472,50 @@ export default function MapPanel({
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      <div className="w-full h-full flex items-center justify-center" style={{ background: "#061826" }}>
+        <div className="w-10 h-10 rounded-full border-2 border-t-transparent" style={{ borderColor: "#05C3B2", borderTopColor: "transparent", animation: "salvoSpin 0.8s linear infinite" }} />
       </div>
     );
   }
 
+  // CSS perspective transform creates the Waze/Maps navigation perspective.
+  // We extend the map container 28% above the viewport so the receding top
+  // fills naturally after the rotateX transform.
+  const navPerspectiveStyle: React.CSSProperties = navMode ? {
+    position: "absolute",
+    top: "-28%",
+    left: 0, right: 0, bottom: 0,
+    transformOrigin: "50% 100%",
+    transform: "perspective(480px) rotateX(44deg)",
+    transition: "all 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
+    willChange: "transform",
+  } : {
+    position: "absolute",
+    inset: 0,
+    transformOrigin: "50% 100%",
+    transform: "none",
+    transition: "all 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
+  };
+
   return (
-    <GoogleMap
-      mapContainerClassName="w-full h-full"
-      center={center}
-      zoom={14}
-      onLoad={onLoad}
-      onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); setSelectedFamily(null); }}
-      options={{
-        styles: MAP_STYLES,
-        disableDefaultUI: true,
-        zoomControl: true,
-        zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
-        gestureHandling: "greedy",
-        clickableIcons: false,
-      }}
-    >
+    <div className="absolute inset-0 overflow-hidden" style={{ background: "#061826" }}>
+      {/* Perspective wrapper — CSS-only tilt, roadmap stays roadmap */}
+      <div style={navPerspectiveStyle}>
+        <GoogleMap
+          mapContainerStyle={{ width: "100%", height: "100%" }}
+          center={center}
+          zoom={14}
+          onLoad={onLoad}
+          onClick={() => { setSelectedReport(null); setSelectedWz(null); setSelectedNews(null); setSelectedFamily(null); }}
+          options={{
+            styles: MAP_STYLES,
+            disableDefaultUI: true,
+            zoomControl: !navMode,
+            zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
+            gestureHandling: navMode ? "none" : "greedy", // lock gestures during nav
+            clickableIcons: false,
+          }}
+        >
       {showTraffic && <TrafficLayer />}
 
       {/* Weather: one large circle per condition type + label marker */}
@@ -671,6 +709,19 @@ export default function MapPanel({
           </div>
         </InfoWindow>
       )}
-    </GoogleMap>
+        </GoogleMap>
+      </div>
+
+      {/* Horizon gradient — softens the receding top in nav mode */}
+      {navMode && (
+        <div
+          className="absolute top-0 left-0 right-0 pointer-events-none z-[5]"
+          style={{
+            height: "22%",
+            background: "linear-gradient(to bottom, rgba(6,24,38,0.55) 0%, transparent 100%)",
+          }}
+        />
+      )}
+    </div>
   );
 }
