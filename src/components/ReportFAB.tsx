@@ -16,9 +16,10 @@ const ITEMS: { type: ReportType }[] = [
 interface ReportFABProps {
   onReport: (type: ReportType) => void;
   onSOSOpen: () => void;
+  navMode?: boolean;
 }
 
-export default function ReportFAB({ onReport, onSOSOpen }: ReportFABProps) {
+export default function ReportFAB({ onReport, onSOSOpen, navMode }: ReportFABProps) {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -89,34 +90,38 @@ export default function ReportFAB({ onReport, onSOSOpen }: ReportFABProps) {
         </div>
       )}
 
-      {/* SOS pill — bottom right */}
-      <button
-        onClick={onSOSOpen}
-        className="fixed z-[90] flex items-center gap-1.5 bg-red-600 text-white rounded-2xl shadow-2xl px-4 h-12 active:scale-90 transition-transform font-bold text-sm"
-        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)", right: 16 }}
-      >
-        <span className="material-symbols-outlined text-[20px]">emergency</span>
-        SOS
-      </button>
+      {/* SOS pill — hidden during navMode (stop button in ETA bar covers this) */}
+      {!navMode && (
+        <button
+          onClick={onSOSOpen}
+          className="fixed z-[90] flex items-center gap-1.5 bg-red-600 text-white rounded-2xl shadow-2xl px-4 h-12 active:scale-90 transition-transform font-bold text-sm"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)", right: 16 }}
+        >
+          <span className="material-symbols-outlined text-[20px]">emergency</span>
+          SOS
+        </button>
+      )}
 
-      {/* Main FAB — center bottom */}
+      {/* Main FAB — center bottom; moves up during navMode to clear ETA bar */}
       <button
         onClick={() => setOpen(v => !v)}
         className="fixed z-[90] active:scale-90"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          bottom: navMode
+            ? "calc(env(safe-area-inset-bottom, 0px) + 90px)"  // above ETA bar
+            : "calc(env(safe-area-inset-bottom, 0px) + 20px)",
           left: "50%",
           transform: "translateX(-50%)",
-          width: 60,
-          height: 60,
-          borderRadius: 20,           // rounded-2xl square tile, not circle
+          width: 52,
+          height: 52,
+          borderRadius: 18,
           background: open ? "#1e293b" : "linear-gradient(135deg, #f97316 0%, #ef4444 100%)",
           boxShadow: open ? "0 8px 32px rgba(30,41,59,.45)" : "0 8px 32px rgba(239,68,68,.45)",
-          transition: "background .2s, box-shadow .2s, border-radius .15s",
+          transition: "background .2s, box-shadow .2s, bottom .3s ease",
         }}
       >
         <span
-          className="material-symbols-outlined text-white text-[26px] select-none"
+          className="material-symbols-outlined text-white text-[24px] select-none"
           style={{
             display: "block",
             transition: "transform .25s cubic-bezier(.34,1.56,.64,1)",

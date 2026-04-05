@@ -22,6 +22,8 @@ const libraries: ("places" | "visualization")[] = ["places", "visualization"];
 const MAP_STYLES = [
   { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
   { featureType: "transit.station", elementType: "labels", stylers: [{ visibility: "on" }] },
+  // Hide individual transit vehicle icons that clutter the map
+  { featureType: "transit.line", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
 ];
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -165,10 +167,10 @@ export default function MapPanel({
 
   const center = cityCenter || userPosition;
 
-  // Neighbourhood circles — derived from city + danger data
+  // Neighbourhood circles — always shown when city is loaded (news-based danger)
   const neighbourhoods = useMemo(
-    () => (routeActive && cityName ? getNeighbourhoods(cityName) : []),
-    [routeActive, cityName]
+    () => (cityName ? getNeighbourhoods(cityName) : []),
+    [cityName]
   );
 
   const onLoad = useCallback((map: google.maps.Map) => {
@@ -184,30 +186,34 @@ export default function MapPanel({
     }
   }, [cityCenter?.lat, cityCenter?.lng]);
 
-  // Auto-pan to real GPS position on first fix
+  // Auto-pan to real GPS position on first fix (not during nav mode — camera handled separately)
   const firstGpsPanRef = useRef(false);
   useEffect(() => {
+    if (navMode) return; // nav mode handles camera
     if (userWatching && !firstGpsPanRef.current && mapRef.current) {
       firstGpsPanRef.current = true;
       mapRef.current.panTo(userPosition);
       mapRef.current.setZoom(15);
     }
-  }, [userWatching, userPosition]);
+  }, [navMode, userWatching, userPosition]);
 
-  // ── Nav mode: Waze-style 3D camera follow ─────────────────────────────────
+  // ── Nav mode: Waze-style 3D camera (hybrid mapType enables tilt) ───────────
   useEffect(() => {
-    if (!navMode || !mapRef.current || !userWatching) return;
+    if (!navMode || !mapRef.current) return;
     const map = mapRef.current;
-    let bearing = 0;
+    // Switch to hybrid for 3D tilt support
+    map.setMapTypeId(google.maps.MapTypeId.HYBRID);
+    map.setZoom(18);
+    map.setTilt(67.5); // Waze-like steep angle
+
+    if (!userWatching) return;
+    let bearing = map.getHeading() || 0;
     if (prevPosRef.current) {
       const dist = haversine(prevPosRef.current.lat, prevPosRef.current.lng, userPosition.lat, userPosition.lng);
-      if (dist > 2) bearing = computeBearing(prevPosRef.current, userPosition);
-      else bearing = (map.getHeading() || 0); // keep current heading when nearly still
+      if (dist > 3) bearing = computeBearing(prevPosRef.current, userPosition);
     }
-    prevPosRef.current = userPosition;
+    prevPosRef.current = { ...userPosition };
     map.panTo(userPosition);
-    map.setZoom(17);
-    map.setTilt(45);
     map.setHeading(bearing);
   }, [navMode, userPosition, userWatching]);
 
@@ -215,10 +221,12 @@ export default function MapPanel({
   useEffect(() => {
     if (navMode || !mapRef.current) return;
     const map = mapRef.current;
+    map.setMapTypeId(google.maps.MapTypeId.ROADMAP);
     map.setTilt(0);
     map.setHeading(0);
     map.setZoom(14);
     prevPosRef.current = null;
+    firstGpsPanRef.current = false;
   }, [navMode]);
 
   // Weather zones
@@ -229,8 +237,9 @@ export default function MapPanel({
     return () => clearInterval(i);
   }, [showRadar]);
 
-  // Directions
+  // Directions — skip entirely during active navigation to prevent reloading
   useEffect(() => {
+    if (navMode) return;
     if (!isLoaded || !routeOrigin || !routeDestination || !routeActive) {
       setLocalDirections(null);
       onDirectionsChange(null, null);
@@ -264,7 +273,7 @@ export default function MapPanel({
         }
       }
     );
-  }, [isLoaded, routeOrigin, routeDestination, routeMode, routeActive, onDirectionsChange]);
+  }, [isLoaded, routeOrigin, routeDestination, routeMode, routeActive, navMode, onDirectionsChange]);
 
   // Pan once on mount
   useEffect(() => {
@@ -306,7 +315,7 @@ export default function MapPanel({
     });
   }, [isLoaded, showRadar]);
 
-  // Heatmap overlay (safety density — user reports + crime news)
+  // Heatmap overlay — user reports + all geolocated news
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return;
     if (heatmapRef.current) { heatmapRef.current.setMap(null); heatmapRef.current = null; }
@@ -316,17 +325,21 @@ export default function MapPanel({
 
     // User reports
     for (const r of reports) {
-      const weight =
-        r.type === "theft" || r.type === "harassment" ? 5 :
-        r.type === "danger" ? 3 :
-        r.type === "dark_street" ? 2 : 1;
+      const weight = r.type === "theft" || r.type === "harassment" ? 5 : r.type === "danger" ? 3 : r.type === "dark_street" ? 2 : 1;
       data.push({ location: new google.maps.LatLng(r.position.lat, r.position.lng), weight });
     }
 
-    // Crime news with geocoded position (higher weight — verified source)
+    // All news with geocoded positions (crime = highest weight)
     for (const n of newsAlerts) {
-      if (n.category === "crime" && n.position) {
-        data.push({ location: new google.maps.LatLng(n.position.lat, n.position.lng), weight: 8 });
+      if (!n.position) continue;
+      const w = n.category === "crime" ? 8 : n.category === "transport" || n.category === "road_closure" ? 4 : 2;
+      data.push({ location: new google.maps.LatLng(n.position.lat, n.position.lng), weight: w });
+    }
+
+    // Fallback: if no real data, seed with low-weight news-position proxies so heatmap is visible
+    if (data.length === 0) {
+      for (const pos of NEWS_POSITIONS) {
+        data.push({ location: new google.maps.LatLng(pos.lat, pos.lng), weight: 1 });
       }
     }
 
@@ -388,6 +401,39 @@ export default function MapPanel({
     });
   }, [isLoaded, reports, newsAlerts]);
 
+  // ── Weather: group by condition, one large circle per type ──────────────────
+  const weatherGroups = useMemo(() => {
+    if (!weatherZones.length) return [];
+    const groups: Record<string, WeatherZonePoint[]> = {};
+    for (const wz of weatherZones) {
+      const key = wz.color; // same color = same condition
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(wz);
+    }
+    const R = 6371000;
+    return Object.values(groups).map((zones) => {
+      const lat = zones.reduce((s, z) => s + z.position.lat, 0) / zones.length;
+      const lng = zones.reduce((s, z) => s + z.position.lng, 0) / zones.length;
+      let maxD = 0;
+      for (const z of zones) {
+        const dLat = (z.position.lat - lat) * Math.PI / 180;
+        const dLng = (z.position.lng - lng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat * Math.PI / 180) * Math.cos(z.position.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        if (d > maxD) maxD = d;
+      }
+      return {
+        position: { lat, lng },
+        radius: Math.max(maxD + 4000, 5000), // cover all points + 4km buffer, min 5km
+        color: zones[0].color,
+        label: zones[0].label,
+        icon: zones[0].icon,
+        precipitation: Math.max(...zones.map(z => z.precipitation)),
+        windSpeed: Math.round(zones.reduce((s, z) => s + z.windSpeed, 0) / zones.length),
+      };
+    });
+  }, [weatherZones]);
+
   const handleVote = async (vote: 1 | -1) => {
     if (!selectedReport) return;
     const rid = selectedReport.id;
@@ -434,30 +480,16 @@ export default function MapPanel({
     >
       {showTraffic && <TrafficLayer />}
 
-      {/* Weather zones */}
-      {showRadar && weatherZones.map((wz, i) => (
-        <Circle key={`wz${i}`} center={wz.position} radius={700}
-          options={{ fillColor: wz.color, fillOpacity: 0.25, strokeColor: wz.color, strokeOpacity: 0.6, strokeWeight: 2, clickable: true }}
-          onClick={() => { setSelectedWz(wz); setSelectedReport(null); }} />
+      {/* Weather: one large circle per condition type + label marker */}
+      {showRadar && weatherGroups.map((g, i) => (
+        <Circle key={`wg${i}`} center={g.position} radius={g.radius}
+          options={{ fillColor: g.color, fillOpacity: 0.18, strokeColor: g.color, strokeOpacity: 0.5, strokeWeight: 1.5, clickable: false }} />
       ))}
-      {showRadar && weatherZones.map((wz, i) => (
-        <Marker key={`wzl${i}`} position={wz.position}
+      {showRadar && weatherGroups.map((g, i) => (
+        <Marker key={`wgl${i}`} position={g.position} clickable={false}
           icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 0 }}
-          label={{ text: `${Math.round(wz.temperature)}°`, color: wz.precipitation > 0 ? "#2563eb" : "#374151", fontSize: "11px", fontWeight: "bold" }}
-          clickable={false} />
+          label={{ text: g.label, color: "#1e293b", fontSize: "11px", fontWeight: "700" }} />
       ))}
-      {selectedWz && (
-        <InfoWindow position={selectedWz.position} onCloseClick={() => setSelectedWz(null)}>
-          <div style={{ padding: 6, maxWidth: 200 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>{selectedWz.name}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, margin: "4px 0" }}>
-              {Math.round(selectedWz.temperature)}°C <span style={{ fontSize: 12, fontWeight: 400, color: "#64748b" }}>{selectedWz.label}</span>
-            </div>
-            {selectedWz.precipitation > 0 && <div style={{ fontSize: 11, color: "#2563eb" }}>Precipitazioni: {selectedWz.precipitation}mm</div>}
-            <div style={{ fontSize: 11, color: "#64748b" }}>Vento: {Math.round(selectedWz.windSpeed)} km/h</div>
-          </div>
-        </InfoWindow>
-      )}
 
       {/* User marker */}
       <Marker position={userPosition} icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#05C3B2", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 }} zIndex={100} />

@@ -5,18 +5,19 @@ import { LatLng } from "@/lib/types";
 import { haversine } from "@/lib/geo";
 import { TransitStep, getVehicleIcon } from "@/lib/transitSteps";
 
-const WALK_MPS = 1.3;         // m/s — average walking speed
-const ARRIVE_THRESHOLD = 80;  // metres — consider step done
+const WALK_MPS = 1.3;
+const ARRIVE_THRESHOLD = 80;
 
 interface NavHUDProps {
   steps: TransitStep[];
   userPosition: LatLng;
   watching: boolean;
   routeActive: boolean;
+  hidden?: boolean;
 }
 
 function distTo(userPosition: LatLng, lat?: number, lng?: number): number {
-  if (lat == null || lng == null) return Infinity;
+  if (lat == null || lng == null) return 0; // fallback 0 so times don't explode
   return haversine(userPosition.lat, userPosition.lng, lat, lng);
 }
 
@@ -29,11 +30,10 @@ function useCountdown() {
   return tick;
 }
 
-export default function NavHUD({ steps, userPosition, watching, routeActive }: NavHUDProps) {
-  const tick = useCountdown();
+export default function NavHUD({ steps, userPosition, watching, routeActive, hidden }: NavHUDProps) {
+  useCountdown();
   const [currentIdx, setCurrentIdx] = useState(0);
 
-  // Detect current step by proximity to each step's end
   useEffect(() => {
     if (!steps.length) return;
     let idx = 0;
@@ -46,25 +46,29 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
     setCurrentIdx(Math.min(idx, steps.length - 1));
   }, [userPosition, steps]);
 
-  if (!routeActive || steps.length === 0) return null;
+  if (!routeActive || steps.length === 0 || hidden) return null;
 
   const cur  = steps[currentIdx];
   const next = steps[currentIdx + 1];
 
   // ── Walking math ──────────────────────────────────────────────────────────
-  const remainingM = (cur.mode === "WALKING" && watching)
+  const rawDist = (cur.mode === "WALKING" && watching)
     ? distTo(userPosition, cur.endLat, cur.endLng)
-    : (cur.totalDistanceM || 0);
-  const remainingMin = Math.max(0, Math.round(remainingM / (WALK_MPS * 60)));
-  const progressPct  = cur.totalDistanceM
+    : (cur.totalDistanceM ?? 0);
+  // Guard against Infinity/NaN (when coords are 0/undefined)
+  const remainingM  = isFinite(rawDist) && rawDist > 0 ? rawDist : (cur.totalDistanceM ?? 0);
+  const remainingMin = Math.min(99, Math.max(0, Math.round(remainingM / (WALK_MPS * 60))));
+  const progressPct  = cur.totalDistanceM && cur.totalDistanceM > 0
     ? Math.min(100, Math.max(2, Math.round((1 - remainingM / cur.totalDistanceM) * 100)))
-    : 0;
+    : 2;
 
   // ── Transit countdown ─────────────────────────────────────────────────────
   const nowSec = Date.now() / 1000;
-  const deptInMin = (cur.mode === "TRANSIT" && cur.departureTimestamp)
-    ? Math.max(0, Math.round((cur.departureTimestamp - nowSec) / 60))
+  const rawDept = (cur.mode === "TRANSIT" && cur.departureTimestamp)
+    ? Math.round((cur.departureTimestamp - nowSec) / 60)
     : null;
+  // Clamp to sane range: if departure is more than 2 hours away the data is stale
+  const deptInMin = rawDept !== null && rawDept >= 0 && rawDept < 120 ? rawDept : null;
 
   return (
     <div
@@ -75,7 +79,7 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
         width: "min(200px, 50vw)",
       }}
     >
-      {/* ── Journey strip ─────────────────────────────────────────────── */}
+      {/* ── Journey strip ─────────────────────────────────────────── */}
       <div className="flex items-center gap-0.5 mb-2 flex-wrap">
         {steps.map((step, i) => {
           const done   = i < currentIdx;
@@ -100,7 +104,6 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               </div>
             );
           }
-          // TRANSIT chip
           const bg = done ? "#10b981" : active ? (step.lineColor || "#05C3B2") : "#e5e7eb";
           const fg = done || active ? (step.lineTextColor || "#fff") : "#9ca3af";
           return (
@@ -119,13 +122,12 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
             </div>
           );
         })}
-        {/* Destination */}
         <div className="w-5 h-5 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
           <span className="material-symbols-outlined text-red-500 text-[11px]">flag</span>
         </div>
       </div>
 
-      {/* ── Current step card ─────────────────────────────────────────── */}
+      {/* ── Current step card ─────────────────────────────────────── */}
       <div
         className="rounded-2xl overflow-hidden"
         style={{
@@ -133,45 +135,35 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
           border: "1px solid rgba(5,195,178,0.18)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.45), 0 0 0 0px rgba(5,195,178,0.1)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
         }}
       >
-
         {/* ── WALKING ── */}
         {cur.mode === "WALKING" && (
           <div className="p-3">
             <div className="flex items-center gap-2">
-              {/* Walker icon */}
               <div className="w-10 h-10 bg-[#05C3B2]/10 rounded-2xl flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-[#05C3B2] text-[22px]">directions_walk</span>
               </div>
-
-              {/* Bar + time */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.45)" }}>A piedi</span>
                   <span className="text-[12px] font-black text-[#05C3B2]">
-                    {watching ? `${remainingMin} min` : cur.duration}
+                    {watching && remainingM > 0 ? `${remainingMin} min` : cur.duration}
                   </span>
                 </div>
-                {/* Animated progress */}
                 <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div
                     className="h-full rounded-full transition-all duration-[800ms] ease-out"
-                    style={{
-                      width: `${progressPct}%`,
-                      background: "linear-gradient(90deg, #07DCC8, #05C3B2)",
-                    }}
+                    style={{ width: `${progressPct}%`, background: "linear-gradient(90deg, #07DCC8, #05C3B2)" }}
                   />
                 </div>
                 {cur.distance && (
                   <div className="text-[9px] mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    {watching && remainingM < 10000 ? `~${Math.round(remainingM)} m rimasti` : cur.distance}
+                    {watching && remainingM > 0 ? `~${Math.round(remainingM)} m rimasti` : cur.distance}
                   </div>
                 )}
               </div>
-
-              {/* Next step badge */}
               {next && (
                 next.mode === "TRANSIT" ? (
                   <div
@@ -192,8 +184,6 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                 )
               )}
             </div>
-
-            {/* Next stop label */}
             {next?.mode === "TRANSIT" && (
               <div className="flex items-center gap-1 mt-2 px-2 py-1.5 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
                 <span className="material-symbols-outlined text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>location_on</span>
@@ -209,7 +199,6 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
         {/* ── TRANSIT ── */}
         {cur.mode === "TRANSIT" && (
           <div className="p-3">
-            {/* Line badge + name */}
             <div className="flex items-center gap-2 mb-2.5">
               <div
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl shadow-sm shrink-0"
@@ -228,12 +217,9 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               </div>
             </div>
 
-            {/* Stops dot-track */}
             <div className="flex items-center gap-0.5 mb-2.5 px-1">
-              {/* Departure dot */}
               <div className="w-3 h-3 rounded-full shrink-0 border-2 shadow-sm"
                 style={{ backgroundColor: cur.lineColor || "#05C3B2", borderColor: "rgba(255,255,255,0.2)" }} />
-              {/* Track with stop dots */}
               <div className="flex-1 flex items-center">
                 <div className="flex-1 h-0.5" style={{ backgroundColor: (cur.lineColor || "#3b82f6") + "50" }} />
                 {Array.from({ length: Math.min((cur.numStops || 1) - 1, 6) }).map((_, i) => (
@@ -243,19 +229,16 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                   </div>
                 ))}
               </div>
-              {/* Arrival dot */}
               <div className="w-3 h-3 rounded-full shrink-0 border-2 shadow-sm"
                 style={{ backgroundColor: "rgba(6,24,38,0.9)", borderColor: cur.lineColor || "#05C3B2" }} />
             </div>
 
-            {/* Time row */}
             <div className="flex items-center gap-1.5">
-              {/* Departure countdown */}
               {deptInMin !== null ? (
                 <div className="flex items-center gap-1 bg-[#05C3B2]/10 rounded-lg px-2 py-1 flex-1">
                   <span className="material-symbols-outlined text-[#05C3B2] text-[11px]">schedule</span>
                   <span className="text-[10px] font-bold text-[#05C3B2]">
-                    {deptInMin <= 0 ? "In partenza" : `tra ${deptInMin} min`}
+                    {deptInMin === 0 ? "In partenza" : `tra ${deptInMin} min`}
                   </span>
                   {cur.departureTime && (
                     <span className="text-[9px] text-[#05C3B2]/60 ml-auto">{cur.departureTime}</span>
@@ -267,8 +250,6 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
                   <span className="text-[10px] font-bold text-[#05C3B2]">{cur.departureTime}</span>
                 </div>
               ) : null}
-
-              {/* Stops count */}
               {cur.numStops ? (
                 <div className="flex items-center gap-0.5 rounded-lg px-2 py-1" style={{ background: "rgba(255,255,255,0.07)" }}>
                   <span className="material-symbols-outlined text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>radio_button_checked</span>
@@ -277,7 +258,6 @@ export default function NavHUD({ steps, userPosition, watching, routeActive }: N
               ) : null}
             </div>
 
-            {/* Arrival time */}
             {cur.arrivalTime && (
               <div className="flex items-center gap-1 mt-1.5 px-2 py-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
                 <span className="material-symbols-outlined text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>flag</span>

@@ -558,18 +558,20 @@ export default function Home() {
         />
       )}
 
-      {/* Live navigation HUD — bottom left */}
+      {/* Live navigation HUD — hidden when sidebar overlaps */}
       <NavHUD
         steps={transitSteps}
         userPosition={position}
         watching={watching}
         routeActive={routeActive && mode === "TRANSIT"}
+        hidden={sidebarOpen}
       />
 
       {/* Floating report FAB + SOS pill */}
       <ReportFAB
         onReport={handleReport}
         onSOSOpen={() => setShowSOS(true)}
+        navMode={navMode}
       />
 
       {/* ── Nav mode: danger zone alert ─────────────────────── */}
